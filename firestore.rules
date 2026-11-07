@@ -1,0 +1,128 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (request.auth.token.email != null && request.auth.token.email.lower() == 'aa525458516@gmail.com')
+      );
+    }
+
+    function isValidBookingCreate(data) {
+      return data.keys().hasAll(['bookingReference', 'customerName', 'phone', 'email', 'passengerCount', 'pickupDate', 'destination', 'status'])
+        && data.status == 'Pending'
+        && data.bookingReference is string && data.bookingReference.size() <= 40
+        && data.customerName is string && data.customerName.size() > 1 && data.customerName.size() <= 100
+        && data.phone is string && data.phone.size() >= 5 && data.phone.size() <= 50
+        && data.email is string && data.email.size() >= 5 && data.email.size() <= 100
+        && data.passengerCount is int && data.passengerCount > 0 && data.passengerCount <= 100
+        && data.pickupDate is string && data.pickupDate.size() <= 30
+        && data.destination is string && data.destination.size() <= 200;
+    }
+
+    function isValidPublicStatusCreate(data) {
+      return data.keys().hasAll(['bookingReference', 'status', 'pickupDate', 'destination'])
+        && data.status == 'Pending'
+        && data.bookingReference is string && data.bookingReference.size() <= 40
+        && (!('phone' in data))
+        && (!('email' in data));
+    }
+
+    function isValidMessageCreate(data) {
+      return data.keys().hasAll(['name', 'email', 'message', 'status'])
+        && (data.status == 'unread' || data.status == 'pending')
+        && data.name is string && data.name.size() > 1 && data.name.size() <= 100
+        && data.email is string && data.email.size() >= 5 && data.email.size() <= 100
+        && data.message is string && data.message.size() > 1 && data.message.size() <= 2000;
+    }
+
+    // Admins collection
+    match /admins/{adminUid} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Bookings collection: Confidential master records with full PII.
+    // Public users CANNOT read or list documents in this collection.
+    // Public users can only create with status 'Pending'.
+    // Only verified administrators can read (get/list), modify status, or delete.
+    match /bookings/{bookingId} {
+      allow get: if isValidId(bookingId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(bookingId) && isValidBookingCreate(incoming());
+      allow update: if isValidId(bookingId) && isAdmin();
+      allow delete: if isValidId(bookingId) && isAdmin();
+    }
+
+    // Public Sanitized Booking Status:
+    // Individual customers can ONLY get their own single status by document ID (= bookingReference).
+    // Listing/scraping is strictly forbidden for non-admins.
+    // Document contains NO customer phone or email, and masked name.
+    match /bookingStatus/{refId} {
+      allow get: if isValidId(refId);
+      allow list: if isAdmin();
+      allow create: if isValidId(refId) && isValidPublicStatusCreate(incoming());
+      allow update: if isValidId(refId) && isAdmin();
+      allow delete: if isValidId(refId) && isAdmin();
+    }
+
+    // Tours catalog
+    match /tours/{tourId} {
+      allow get, list: if true;
+      allow create, update, delete: if isValidId(tourId) && isAdmin();
+    }
+
+    // Contact messages & inquiries
+    match /contactMessages/{messageId} {
+      allow create: if isValidId(messageId) && isValidMessageCreate(incoming());
+      allow get, list, update, delete: if isValidId(messageId) && isAdmin();
+    }
+
+    // Company Settings
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isValidId(settingId) && isAdmin();
+    }
+
+    // Custom Trip Requests
+    match /customTripRequests/{requestId} {
+      allow get: if isValidId(requestId);
+      allow list: if isAdmin();
+      allow create: if isValidId(requestId) 
+        && incoming().status == 'Pending Review'
+        && incoming().referenceNumber is string && incoming().referenceNumber.size() <= 40
+        && incoming().customerName is string && incoming().customerName.size() > 1 && incoming().customerName.size() <= 100
+        && incoming().phone is string && incoming().phone.size() >= 5 && incoming().phone.size() <= 50
+        && incoming().email is string && incoming().email.size() >= 5 && incoming().email.size() <= 100
+        && incoming().passengerCount is int && incoming().passengerCount > 0 && incoming().passengerCount <= 2;
+      allow update: if isValidId(requestId) && (
+        isAdmin() || 
+        (resource.data.status == 'Price Sent' && incoming().status == 'Customer Approved' && incoming().diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']))
+      );
+      allow delete: if isValidId(requestId) && isAdmin();
+    }
+  }
+}

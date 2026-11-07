@@ -1,0 +1,355 @@
+{
+  "entities": {
+    "Booking": {
+      "title": "Booking",
+      "description": "Confidential customer airport transfer and tour booking request with full PII",
+      "type": "object",
+      "properties": {
+        "bookingReference": {
+          "type": "string",
+          "description": "Unique booking reference code e.g. PEG-12345",
+          "maxLength": 30
+        },
+        "customerName": {
+          "type": "string",
+          "description": "Full name of the primary passenger",
+          "maxLength": 100
+        },
+        "phone": {
+          "type": "string",
+          "description": "Customer mobile phone / WhatsApp number",
+          "maxLength": 30
+        },
+        "email": {
+          "type": "string",
+          "description": "Customer contact email address",
+          "maxLength": 100
+        },
+        "nationality": {
+          "type": "string",
+          "description": "Customer nationality or country of origin",
+          "maxLength": 60
+        },
+        "passengerCount": {
+          "type": "integer",
+          "description": "Total number of passengers"
+        },
+        "luggageCount": {
+          "type": "integer",
+          "description": "Total number of luggage pieces"
+        },
+        "pickupDate": {
+          "type": "string",
+          "description": "Date of pickup YYYY-MM-DD",
+          "maxLength": 20
+        },
+        "pickupTime": {
+          "type": "string",
+          "description": "Scheduled pickup time HH:MM",
+          "maxLength": 20
+        },
+        "serviceType": {
+          "type": "string",
+          "description": "Type of requested transport service",
+          "maxLength": 40
+        },
+        "origin": {
+          "type": "string",
+          "description": "Pickup point or airport terminal",
+          "maxLength": 150
+        },
+        "destination": {
+          "type": "string",
+          "description": "Destination hotel, resort or city",
+          "maxLength": 150
+        },
+        "flightNumber": {
+          "type": "string",
+          "description": "Airline flight number for flight tracking",
+          "maxLength": 30
+        },
+        "vehicleType": {
+          "type": "string",
+          "description": "Preferred vehicle category",
+          "maxLength": 40
+        },
+        "notes": {
+          "type": "string",
+          "description": "Special requirements or customer notes",
+          "maxLength": 1000
+        },
+        "status": {
+          "type": "string",
+          "description": "Current workflow status: Pending, Confirmed, Completed, Cancelled",
+          "enum": ["Pending", "Confirmed", "Completed", "Cancelled"]
+        },
+        "adminNotes": {
+          "type": "string",
+          "description": "Internal dispatch and driver assignment notes",
+          "maxLength": 1000
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        }
+      },
+      "required": ["bookingReference", "customerName", "phone", "email", "passengerCount", "pickupDate", "destination", "status"]
+    },
+    "BookingPublicStatus": {
+      "title": "BookingPublicStatus",
+      "description": "Sanitized status card without private customer PII for reference-based lookups",
+      "type": "object",
+      "properties": {
+        "bookingReference": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Pending", "Confirmed", "Completed", "Cancelled"]
+        },
+        "maskedCustomerName": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "pickupDate": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "pickupTime": {
+          "type": "string",
+          "maxLength": 20
+        },
+        "origin": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "destination": {
+          "type": "string",
+          "maxLength": 150
+        },
+        "vehicleType": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "adminNotes": {
+          "type": "string",
+          "maxLength": 1000
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": ["bookingReference", "status", "pickupDate", "destination"]
+    },
+    "Tour": {
+      "title": "Tour",
+      "description": "Organized tour and excursion package",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Tour title in English",
+          "maxLength": 120
+        },
+        "titleDe": {
+          "type": "string",
+          "description": "Tour title in German",
+          "maxLength": 120
+        },
+        "titleAr": {
+          "type": "string",
+          "description": "Tour title in Arabic",
+          "maxLength": 120
+        },
+        "category": {
+          "type": "string",
+          "description": "Category such as historical, marine, safari, daytrip",
+          "maxLength": 40
+        },
+        "destination": {
+          "type": "string",
+          "description": "Destination name e.g. Luxor, Cairo, Marsa Alam, Hurghada",
+          "maxLength": 100
+        },
+        "duration": {
+          "type": "string",
+          "description": "Approximate duration placeholder",
+          "maxLength": 80
+        },
+        "pricePerPerson": {
+          "type": "number",
+          "description": "Price placeholder per person in EUR or USD"
+        },
+        "priceNotice": {
+          "type": "string",
+          "description": "Price notice e.g. Quote Upon Request",
+          "maxLength": 100
+        },
+        "description": {
+          "type": "string",
+          "description": "English description of tour itinerary",
+          "maxLength": 3000
+        },
+        "descriptionDe": {
+          "type": "string",
+          "description": "German description of tour itinerary",
+          "maxLength": 3000
+        },
+        "descriptionAr": {
+          "type": "string",
+          "description": "Arabic description of tour itinerary",
+          "maxLength": 3000
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "Featured high-resolution photo URL",
+          "maxLength": 500
+        },
+        "featured": {
+          "type": "boolean",
+          "description": "Whether to feature on home page"
+        },
+        "active": {
+          "type": "boolean",
+          "description": "Whether the tour is currently bookable"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Update timestamp"
+        }
+      },
+      "required": ["title", "category", "destination", "duration", "active"]
+    },
+    "ContactMessage": {
+      "title": "ContactMessage",
+      "description": "Inquiry submitted by a visitor via contact form",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Sender name",
+          "maxLength": 100
+        },
+        "email": {
+          "type": "string",
+          "description": "Sender email",
+          "maxLength": 100
+        },
+        "phone": {
+          "type": "string",
+          "description": "Sender phone number",
+          "maxLength": 40
+        },
+        "subject": {
+          "type": "string",
+          "description": "Inquiry subject",
+          "maxLength": 150
+        },
+        "message": {
+          "type": "string",
+          "description": "Inquiry message body",
+          "maxLength": 2000
+        },
+        "status": {
+          "type": "string",
+          "description": "Message status",
+          "enum": ["unread", "read", "replied"]
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp"
+        }
+      },
+      "required": ["name", "email", "message", "status"]
+    },
+    "CompanySettings": {
+      "title": "CompanySettings",
+      "description": "Company contact details, editable placeholders and operations info",
+      "type": "object",
+      "properties": {
+        "companyName": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "phone": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "whatsapp": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "address": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "emergencyPhone": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "officeHours": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "licenseNumber": {
+          "type": "string",
+          "maxLength": 120
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "firestore": {
+    "/bookings/{bookingId}": {
+      "schema": {
+        "$ref": "#/entities/Booking"
+      },
+      "description": "Customer booking requests with confidential PII, accessible only by admin"
+    },
+    "/bookingStatus/{bookingReference}": {
+      "schema": {
+        "$ref": "#/entities/BookingPublicStatus"
+      },
+      "description": "Public sanitized booking status card for reference lookups"
+    },
+    "/tours/{tourId}": {
+      "schema": {
+        "$ref": "#/entities/Tour"
+      },
+      "description": "Organized tours catalog"
+    },
+    "/contactMessages/{messageId}": {
+      "schema": {
+        "$ref": "#/entities/ContactMessage"
+      },
+      "description": "Contact form inquiries from customers"
+    },
+    "/settings/company": {
+      "schema": {
+        "$ref": "#/entities/CompanySettings"
+      },
+      "description": "Global company contact and business information"
+    },
+    "/admins/{adminUid}": {
+      "schema": {
+        "$ref": "#/entities/Booking"
+      },
+      "description": "Authorized administrator registry"
+    }
+  }
+}

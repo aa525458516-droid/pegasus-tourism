@@ -1,0 +1,8 @@
+{
+  "name": "PEGASUS - Luxury Private Tourism & Transfers Hurghada",
+  "description": "Premium private airport transfers, chauffeur services, and organized tours across Hurghada, Luxor, Cairo, and Marsa Alam, Egypt.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

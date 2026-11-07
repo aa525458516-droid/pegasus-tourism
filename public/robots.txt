@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://pegasus-hurghada.com/sitemap.xml
