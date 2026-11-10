@@ -9,7 +9,8 @@ import {
   Globe, 
   Lock,
   ArrowUp,
-  Car
+  Car,
+  Code2
 } from 'lucide-react';
 import { Language } from '../types';
 
@@ -201,8 +202,17 @@ export const Footer: React.FC<FooterProps> = ({
         </div>
 
         {/* Bottom bar */}
-        <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <p>© {new Date().getFullYear()} PEGASUS Hurghada Luxury Tourism. {t('footer.rights')}</p>
+        <div className="pt-8 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+          <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4 text-center sm:text-start">
+            <p>© {new Date().getFullYear()} PEGASUS Hurghada Luxury Tourism. {t('footer.rights')}</p>
+            <span className="hidden sm:inline text-slate-700">•</span>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-slate-400">
+              <Code2 className="w-3.5 h-3.5 text-[#D4AF37]" />
+              <span className="text-[11px] font-medium tracking-wide">
+                {t('footer.developer')}
+              </span>
+            </div>
+          </div>
 
           <div className="flex items-center gap-4">
             {/* Language switch shortcuts */}

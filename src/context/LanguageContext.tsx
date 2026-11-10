@@ -255,6 +255,7 @@ const translations: Record<Language, Record<string, string>> = {
     'footer.services': 'Our Services',
     'footer.destinations': 'Popular Destinations',
     'footer.rights': 'All rights reserved. PEGASUS Hurghada Luxury Tourism.',
+    'footer.developer': 'Web Developer: Ali Ahmed',
     'footer.disclaimer': 'All prices, vehicles and trip schedules are subject to confirmation by PEGASUS dispatch office.'
   },
 
@@ -504,6 +505,7 @@ const translations: Record<Language, Record<string, string>> = {
     'footer.services': 'Dienstleistungen',
     'footer.destinations': 'Beliebte Ziele',
     'footer.rights': 'Alle Rechte vorbehalten. PEGASUS Hurghada Luxury Tourism.',
+    'footer.developer': 'Web-Entwickler: Ali Ahmed',
     'footer.disclaimer': 'Alle Preise und Fahrpläne unterliegen der Bestätigung durch die Disposition.'
   },
 
@@ -753,6 +755,7 @@ const translations: Record<Language, Record<string, string>> = {
     'footer.services': 'خدماتنا',
     'footer.destinations': 'وجهات شائعة',
     'footer.rights': 'جميع الحقوق محفوظة. بيجاسوس للسياحة الفاخرة بالغردقة.',
+    'footer.developer': 'تطوير وبرمجة الموقع: Ali Ahmed',
     'footer.disclaimer': 'جميع الأسعار والجداول الزمنية خاضعة لتأكيد مكتب التنسيق والحجز.'
   }
 };
