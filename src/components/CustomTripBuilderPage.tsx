@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { createCustomTripRequest } from '../services/customTripService';
+import { playBookingChime, getAdminCustomTripWhatsAppAlertUrl } from '../services/notificationService';
 import { CustomTripRequest, SelectedExperience, ExperienceItem } from '../types';
 import { INITIAL_EXPERIENCES } from '../data/experiencesData';
 import { 
@@ -30,7 +31,7 @@ import {
 } from 'lucide-react';
 
 interface CustomTripBuilderPageProps {
-  onTrackTrip?: (reference: string) => void;
+  onTrackTrip?: (reference: string, contact?: string) => void;
   onExploreOther?: () => void;
 }
 
@@ -39,6 +40,7 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
   onExploreOther,
 }) => {
   const { t, language, direction } = useLanguage();
+  const todayIso = new Date().toISOString().split('T')[0];
 
   // Wizard Step: 1 (Basics) | 2 (Experiences) | 3 (Customize) | 4 (Customer) | 5 (Review) | 6 (Success)
   const [currentStep, setCurrentStep] = useState<number>(1);
@@ -54,11 +56,12 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
     d.setDate(d.getDate() + 5);
     return d.toISOString().split('T')[0];
   });
-  const [passengerCount, setPassengerCount] = useState<number>(2); // Max 2 per business model
+  const [passengerCount, setPassengerCount] = useState<number>(2); // 1 to 4 max
   const [pickup, setPickup] = useState('Hurghada International Airport (HRG)');
   const [accommodation, setAccommodation] = useState('Steigenberger ALDAU Beach Resort');
   const [destination, setDestination] = useState('El Gouna & Luxor');
   const [specialRequests, setSpecialRequests] = useState('');
+  const [honeypot, setHoneypot] = useState('');
 
   // STEP 2: Selected Experiences
   const [selectedExpIds, setSelectedExpIds] = useState<string[]>(['exp-airport-transfer', 'exp-quad-safari']);
@@ -81,24 +84,26 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
   const [copied, setCopied] = useState(false);
 
   const categories = [
-    { id: 'all', label: language === 'ar' ? 'جميع الأنشطة' : language === 'de' ? 'Alle Aktivitäten' : 'All Experiences' },
-    { id: 'safari_desert', label: language === 'ar' ? 'السفاري والصحراء' : language === 'de' ? 'Safari & Wüste' : 'Safari & Desert' },
-    { id: 'kite_water', label: language === 'ar' ? 'الكايت والرياضات المائية' : language === 'de' ? 'Kite & Wassersport' : 'Kite & Water' },
-    { id: 'boat_trips', label: language === 'ar' ? 'الرحلات البحرية' : language === 'de' ? 'Bootstouren' : 'Boat Trips' },
-    { id: 'sea_snorkeling', label: language === 'ar' ? 'الغوص والسنوركلنج' : language === 'de' ? 'Meer & Schnorcheln' : 'Sea & Snorkeling' },
-    { id: 'cultural_trips', label: language === 'ar' ? 'الرحلات الثقافية' : language === 'de' ? 'Kultur & Ausflüge' : 'Cultural & Day Trips' },
-    { id: 'transportation', label: language === 'ar' ? 'النقل والتحويلات' : language === 'de' ? 'Transport & Transfers' : 'Transportation' },
+    { id: 'all', label: language === 'ru' ? 'Все активности' : language === 'ar' ? 'جميع الأنشطة' : language === 'de' ? 'Alle Aktivitäten' : 'All Experiences' },
+    { id: 'safari_desert', label: language === 'ru' ? 'Сафари и пустыня' : language === 'ar' ? 'السفاري والصحراء' : language === 'de' ? 'Safari & Wüste' : 'Safari & Desert' },
+    { id: 'kite_water', label: language === 'ru' ? 'Кайт и водный спорт' : language === 'ar' ? 'الكايت والرياضات المائية' : language === 'de' ? 'Kite & Wassersport' : 'Kite & Water' },
+    { id: 'boat_trips', label: language === 'ru' ? 'Морские прогулки' : language === 'ar' ? 'الرحلات البحرية' : language === 'de' ? 'Bootstouren' : 'Boat Trips' },
+    { id: 'sea_snorkeling', label: language === 'ru' ? 'Море и снорклинг' : language === 'ar' ? 'الغوص والسنوركلنج' : language === 'de' ? 'Meer & Schnorcheln' : 'Sea & Snorkeling' },
+    { id: 'cultural_trips', label: language === 'ru' ? 'Культура и однодневные туры' : language === 'ar' ? 'الرحلات الثقافية' : language === 'de' ? 'Kultur & Ausflüge' : 'Cultural & Day Trips' },
+    { id: 'transportation', label: language === 'ru' ? 'Транспорт и трансферы' : language === 'ar' ? 'النقل والتحويلات' : language === 'de' ? 'Transport & Transfers' : 'Transportation' },
   ];
 
   const getLocalizedExpTitle = (exp: ExperienceItem) => {
-    if (language === 'de') return exp.titleDe;
-    if (language === 'ar') return exp.titleAr;
+    if (language === 'ru') return exp.titleRu || exp.title;
+    if (language === 'de') return exp.titleDe || exp.title;
+    if (language === 'ar') return exp.titleAr || exp.title;
     return exp.title;
   };
 
   const getLocalizedExpDesc = (exp: ExperienceItem) => {
-    if (language === 'de') return exp.descriptionDe;
-    if (language === 'ar') return exp.descriptionAr;
+    if (language === 'ru') return exp.descriptionRu || exp.description;
+    if (language === 'de') return exp.descriptionDe || exp.description;
+    if (language === 'ar') return exp.descriptionAr || exp.description;
     return exp.description;
   };
 
@@ -119,10 +124,38 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
   const handleNextFromStep1 = (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
-    if (!startDate) newErrors.startDate = 'Start date is required';
-    if (!pickup.trim()) newErrors.pickup = 'Pickup location is required';
-    if (!accommodation.trim()) newErrors.accommodation = 'Hotel / accommodation is required';
-    if (passengerCount < 1 || passengerCount > 2) newErrors.passengerCount = 'Maximum 2 passengers allowed per private trip model';
+    if (!startDate) {
+      newErrors.startDate =
+        language === 'ru'
+          ? 'Укажите дату начала'
+          : language === 'ar'
+          ? 'تاريخ البداية مطلوب'
+          : language === 'de'
+          ? 'Startdatum ist erforderlich'
+          : 'Start date is required';
+    }
+    if (startDate < todayIso) {
+      newErrors.startDate =
+        language === 'ru'
+          ? 'Дата начала не может быть в прошлом'
+          : language === 'ar'
+          ? 'لا يمكن أن يكون تاريخ البداية في الماضي'
+          : language === 'de'
+          ? 'Startdatum darf nicht in der Vergangenheit liegen'
+          : 'Start date cannot be in the past';
+    }
+    if (!pickup.trim()) newErrors.pickup = t('booking.valPickup');
+    if (!accommodation.trim()) {
+      newErrors.accommodation =
+        language === 'ru'
+          ? 'Укажите отель или место проживания'
+          : language === 'ar'
+          ? 'يرجى إدخال اسم الفندق أو مكان الإقامة'
+          : language === 'de'
+          ? 'Hotel / Unterkunft ist erforderlich'
+          : 'Hotel / accommodation is required';
+    }
+    if (passengerCount < 1 || passengerCount > 4) newErrors.passengerCount = t('booking.valPassengers');
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -135,7 +168,15 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
 
   const handleNextFromStep2 = () => {
     if (selectedExpIds.length === 0) {
-      setGeneralError('Please select at least one experience or transfer for your custom trip.');
+      setGeneralError(
+        language === 'ru'
+          ? 'Выберите хотя бы одну активность или трансфер для индивидуального тура.'
+          : language === 'ar'
+          ? 'يرجى اختيار نشاط واحد أو خدمة نقل على الأقل لرحلتك المخصصة.'
+          : language === 'de'
+          ? 'Bitte wählen Sie mindestens eine Aktivität oder einen Transfer für Ihre Reise aus.'
+          : 'Please select at least one experience or transfer for your custom trip.'
+      );
       return;
     }
     setGeneralError(null);
@@ -151,10 +192,10 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
   const handleNextFromStep4 = (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
-    if (!customerName.trim() || customerName.trim().length < 2) newErrors.customerName = 'Full name is required';
+    if (!customerName.trim() || customerName.trim().length < 2) newErrors.customerName = t('booking.valName');
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email.trim() || !emailRegex.test(email.trim())) newErrors.email = 'Valid email is required';
-    if (!phone.trim() || phone.replace(/\D/g, '').length < 6) newErrors.phone = 'Valid phone or WhatsApp number is required';
+    if (!email.trim() || !emailRegex.test(email.trim())) newErrors.email = t('booking.valEmail');
+    if (!phone.trim() || phone.replace(/\D/g, '').length < 6) newErrors.phone = t('booking.valPhone');
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -166,6 +207,9 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
   };
 
   const handleFinalSubmit = async () => {
+    if (honeypot.trim()) {
+      return;
+    }
     setLoading(true);
     setGeneralError(null);
 
@@ -189,7 +233,7 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
         country: country.trim() || 'International',
         startDate,
         endDate,
-        passengerCount: Math.min(2, Math.max(1, passengerCount)),
+        passengerCount: Math.min(4, Math.max(1, passengerCount)),
         pickup: pickup.trim(),
         accommodation: accommodation.trim(),
         destination: destination.trim(),
@@ -198,11 +242,20 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
       });
 
       setSubmittedTrip(result);
+      playBookingChime();
       setCurrentStep(6);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       console.error('Custom trip submission error:', err);
-      setGeneralError('Could not submit custom trip request. Please check your network or contact dispatch on WhatsApp.');
+      setGeneralError(
+        language === 'ru'
+          ? 'Не удалось отправить заявку. Проверьте интернет-соединение или свяжитесь с диспетчером в WhatsApp.'
+          : language === 'ar'
+          ? 'تعذر إرسال طلب الرحلة المخصصة. يرجى التحقق من الإنترنت أو التواصل عبر واتساب.'
+          : language === 'de'
+          ? 'Anfrage konnte nicht gesendet werden. Bitte prüfen Sie Ihre Verbindung oder kontaktieren Sie uns per WhatsApp.'
+          : 'Could not submit custom trip request. Please check your network or contact dispatch on WhatsApp.'
+      );
     } finally {
       setLoading(false);
     }
@@ -224,13 +277,27 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
         <div className="text-center space-y-3">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#0D1B2A] text-[#D4AF37] text-xs font-bold uppercase tracking-widest shadow-xs">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>PEGASUS Bespoke Experience</span>
+            <span>
+              {language === 'ru'
+                ? 'Индивидуальный сервис PEGASUS'
+                : language === 'ar'
+                ? 'تجربة PEGASUS المخصصة'
+                : language === 'de'
+                ? 'PEGASUS Maßgeschneidertes Erlebnis'
+                : 'PEGASUS Bespoke Experience'}
+            </span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-extrabold text-[#0D1B2A] font-heading">
-            Build Your Perfect Trip
+            {t('nav.buildTrip', 'Build Your Perfect Trip')}
           </h1>
           <p className="text-slate-600 text-sm sm:text-base max-w-2xl mx-auto">
-            Combine airport transfers, desert safaris, kitesurfing, boat cruises, and cultural excursions into a single custom itinerary. Our team will review and calculate the best price for you.
+            {language === 'ru'
+              ? 'Объедините трансферы из аэропорта, сафари в пустыне, кайтсёрфинг, морские круизы и культурные экскурсии в единый персональный маршрут. Наша команда рассмотрит заявку и рассчитает для вас лучшую цену.'
+              : language === 'ar'
+              ? 'اجمع بين انتقالات المطار وسفاري الصحراء والكايت والرحلات البحرية والجولات الثقافية في برنامج واحد مخصص. سيقوم فريقنا بمراجعته وحساب أفضل سعر لك.'
+              : language === 'de'
+              ? 'Kombinieren Sie Flughafentransfers, Wüstensafaris, Kitesurfen, Bootstouren und Kulturausflüge zu Ihrer Wunschroute. Unser Team prüft alles und erstellt Ihnen das beste Angebot.'
+              : 'Combine airport transfers, desert safaris, kitesurfing, boat cruises, and cultural excursions into a single custom itinerary. Our team will review and calculate the best price for you.'}
           </p>
         </div>
 
@@ -238,11 +305,11 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
         {currentStep < 6 && (
           <div className="grid grid-cols-5 gap-2 bg-white p-3 rounded-2xl border border-[#EAE4D9] shadow-xs">
             {[
-              { num: 1, label: 'Basics' },
-              { num: 2, label: 'Experiences' },
-              { num: 3, label: 'Schedule' },
-              { num: 4, label: 'Customer' },
-              { num: 5, label: 'Review' },
+              { num: 1, label: language === 'ru' ? 'Основы' : language === 'ar' ? 'الأساسيات' : language === 'de' ? 'Basisdaten' : 'Basics' },
+              { num: 2, label: language === 'ru' ? 'Активности' : language === 'ar' ? 'الأنشطة' : language === 'de' ? 'Aktivitäten' : 'Experiences' },
+              { num: 3, label: language === 'ru' ? 'График' : language === 'ar' ? 'الجدول' : language === 'de' ? 'Zeitplan' : 'Schedule' },
+              { num: 4, label: language === 'ru' ? 'Контакты' : language === 'ar' ? 'البيانات' : language === 'de' ? 'Kontakt' : 'Customer' },
+              { num: 5, label: language === 'ru' ? 'Обзор' : language === 'ar' ? 'المراجعة' : language === 'de' ? 'Übersicht' : 'Review' },
             ].map((s) => {
               const isPassed = currentStep > s.num;
               const isCurrent = currentStep === s.num;
@@ -280,14 +347,25 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
           <form onSubmit={handleNextFromStep1} className="bg-white rounded-2xl border border-[#EAE4D9] p-6 sm:p-8 space-y-6 shadow-xs">
             <h3 className="text-lg font-bold text-[#0D1B2A] flex items-center gap-2 border-b border-[#F0ECE1] pb-3">
               <Calendar className="w-5 h-5 text-[#D4AF37]" />
-              <span>Step 1 — Trip Basics & Schedule</span>
+              <span>
+                {language === 'ru'
+                  ? 'Шаг 1 — Основы поездки и даты'
+                  : language === 'ar'
+                  ? 'الخطوة 1 — أساسيات الرحلة والمواعيد'
+                  : language === 'de'
+                  ? 'Schritt 1 — Reisedaten & Basisinfos'
+                  : 'Step 1 — Trip Basics & Schedule'}
+              </span>
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">Start Date *</label>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  {language === 'ru' ? 'Дата начала *' : language === 'ar' ? 'تاريخ البداية *' : language === 'de' ? 'Startdatum *' : 'Start Date *'}
+                </label>
                 <input
                   type="date"
+                  min={todayIso}
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#D5CDBD] text-xs font-medium text-slate-900 bg-white focus:outline-hidden focus:border-[#D4AF37]"
@@ -296,9 +374,12 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">End Date (Approx.)</label>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  {language === 'ru' ? 'Дата окончания (прим.)' : language === 'ar' ? 'تاريخ الانتهاء (تقريبي)' : language === 'de' ? 'Enddatum (ca.)' : 'End Date (Approx.)'}
+                </label>
                 <input
                   type="date"
+                  min={startDate || todayIso}
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#D5CDBD] text-xs font-medium text-slate-900 bg-white focus:outline-hidden focus:border-[#D4AF37]"
@@ -309,26 +390,48 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1">
-                  Passengers <span className="text-[#D4AF37] font-semibold">(Max 2 Passengers)</span> *
+                  {t('booking.passengersCount')}{' '}
+                  <span className="text-[#D4AF37] font-semibold">
+                    ({language === 'ru' ? 'Макс. 4 пассажира' : language === 'ar' ? 'حد أقصى 4 أفراد' : language === 'de' ? 'Max. 4 Passagiere' : 'Max 4 Passengers'})
+                  </span>{' '}
+                  *
                 </label>
                 <select
                   value={passengerCount}
                   onChange={(e) => setPassengerCount(Number(e.target.value))}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#D5CDBD] text-xs font-bold text-[#0D1B2A] bg-white focus:outline-hidden focus:border-[#D4AF37]"
                 >
-                  <option value={1}>1 Passenger (Private VIP)</option>
-                  <option value={2}>2 Passengers (Private Couple / Duo)</option>
+                  <option value={1}>
+                    {language === 'ru' ? '1 пассажир (индивидуальный VIP)' : language === 'ar' ? '1 فرد (VIP خاص)' : language === 'de' ? '1 Person (Privat-VIP)' : '1 Passenger (Private VIP)'}
+                  </option>
+                  <option value={2}>
+                    {language === 'ru' ? '2 пассажира (пара / дуэт)' : language === 'ar' ? '2 أفراد (ثنائي خاص)' : language === 'de' ? '2 Personen (Paar / Duo)' : '2 Passengers (Private Couple / Duo)'}
+                  </option>
+                  <option value={3}>
+                    {language === 'ru' ? '3 пассажира (небольшая семья)' : language === 'ar' ? '3 أفراد (عائلة صغيرة)' : language === 'de' ? '3 Personen (Kleine Familie)' : '3 Passengers (Small Family)'}
+                  </option>
+                  <option value={4}>
+                    {language === 'ru' ? '4 пассажира (макс. стандарт)' : language === 'ar' ? '4 أفراد (الحد الأقصى القياسي)' : language === 'de' ? '4 Personen (Standard-Maximum)' : '4 Passengers (Standard Family / Group Max)'}
+                  </option>
                 </select>
-                <p className="text-[10px] text-slate-500 mt-1">PEGASUS model strictly specializes in private 1-2 passenger luxury transfers & excursions.</p>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  {language === 'ru'
+                    ? 'Стандартные автомобили вмещают до 4 пассажиров с комфортным местом для багажа.'
+                    : language === 'ar'
+                    ? 'تتسع السيارات القياسية لما يصل إلى 4 ركاب مع مساحة مريحة للأمتعة.'
+                    : language === 'de'
+                    ? 'Standardfahrzeuge bieten Platz für bis zu 4 Passagiere und Gepäck.'
+                    : 'Vehicle categories accommodate up to 4 passengers with comfortable luggage space.'}
+                </p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">Pickup Location *</label>
+                <label className="block text-xs font-bold text-slate-800 mb-1">{t('booking.pickupLocation')} *</label>
                 <input
                   type="text"
                   value={pickup}
                   onChange={(e) => setPickup(e.target.value)}
-                  placeholder="e.g. Hurghada Airport (HRG) or Hotel"
+                  placeholder={language === 'ru' ? 'Напр., Аэропорт Хургады (HRG) или отель' : 'e.g. Hurghada Airport (HRG) or Hotel'}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#D5CDBD] text-xs font-medium text-slate-900 bg-white focus:outline-hidden focus:border-[#D4AF37]"
                 />
                 {errors.pickup && <p className="text-[11px] text-rose-600 mt-1">{errors.pickup}</p>}
@@ -337,36 +440,50 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">Hotel / Accommodation *</label>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  {language === 'ru' ? 'Отель / место проживания *' : language === 'ar' ? 'الفندق / مكان الإقامة *' : language === 'de' ? 'Hotel / Unterkunft *' : 'Hotel / Accommodation *'}
+                </label>
                 <input
                   type="text"
                   value={accommodation}
                   onChange={(e) => setAccommodation(e.target.value)}
-                  placeholder="e.g. Steigenberger ALDAU / El Gouna Resort"
+                  placeholder={language === 'ru' ? 'Напр., Steigenberger ALDAU / курорт в Эль-Гуне' : 'e.g. Steigenberger ALDAU / El Gouna Resort'}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#D5CDBD] text-xs font-medium text-slate-900 bg-white focus:outline-hidden focus:border-[#D4AF37]"
                 />
                 {errors.accommodation && <p className="text-[11px] text-rose-600 mt-1">{errors.accommodation}</p>}
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">Optional Target Destination</label>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  {language === 'ru' ? 'Дополнительное направление' : language === 'ar' ? 'وجهة إضافية اختيارية' : language === 'de' ? 'Optionales Reiseziel' : 'Optional Target Destination'}
+                </label>
                 <input
                   type="text"
                   value={destination}
                   onChange={(e) => setDestination(e.target.value)}
-                  placeholder="e.g. Luxor, Cairo, Sahl Hasheesh"
+                  placeholder={language === 'ru' ? 'Напр., Луксор, Каир, Сахл-Хашиш' : 'e.g. Luxor, Cairo, Sahl Hasheesh'}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#D5CDBD] text-xs font-medium text-slate-900 bg-white focus:outline-hidden focus:border-[#D4AF37]"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1">Special Requirements & Notes</label>
+              <label className="block text-xs font-bold text-slate-800 mb-1">
+                {language === 'ru' ? 'Особые пожелания и примечания' : language === 'ar' ? 'متطلبات وملاحظات خاصة' : language === 'de' ? 'Besondere Wünsche & Hinweise' : 'Special Requirements & Notes'}
+              </label>
               <textarea
                 value={specialRequests}
                 onChange={(e) => setSpecialRequests(e.target.value)}
                 rows={3}
-                placeholder="Child safety seats, dietary preferences, or specific timing requirements..."
+                placeholder={
+                  language === 'ru'
+                    ? 'Детские кресла, пожелания по питанию или удобное время...'
+                    : language === 'ar'
+                    ? 'مقاعد أطفال، تفضيلات خاصة أو مواعيد محددة...'
+                    : language === 'de'
+                    ? 'Kindersitze, Verpflegungswünsche oder bevorzugte Zeiten...'
+                    : 'Child safety seats, dietary preferences, or specific timing requirements...'
+                }
                 className="w-full px-3.5 py-2.5 rounded-xl border border-[#D5CDBD] text-xs font-medium text-slate-900 bg-white focus:outline-hidden focus:border-[#D4AF37]"
               />
             </div>
@@ -376,7 +493,15 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
                 type="submit"
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#0D1B2A] to-[#1B263B] text-[#D4AF37] font-bold text-xs sm:text-sm border border-[#D4AF37]/50 shadow-md hover:brightness-110 transition cursor-pointer"
               >
-                <span>Select Experiences</span>
+                <span>
+                  {language === 'ru'
+                    ? 'Выбрать активности'
+                    : language === 'ar'
+                    ? 'اختيار الأنشطة'
+                    : language === 'de'
+                    ? 'Aktivitäten auswählen'
+                    : 'Select Experiences'}
+                </span>
                 <ArrowRight className="w-4 h-4 rtl:rotate-180" />
               </button>
             </div>
@@ -391,7 +516,15 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#F0ECE1] pb-3">
               <h3 className="text-lg font-bold text-[#0D1B2A] flex items-center gap-2">
                 <Compass className="w-5 h-5 text-[#D4AF37]" />
-                <span>Step 2 — Choose Your Experiences ({selectedExpIds.length} Selected)</span>
+                <span>
+                  {language === 'ru'
+                    ? `Шаг 2 — Выберите активности (выбрано: ${selectedExpIds.length})`
+                    : language === 'ar'
+                    ? `الخطوة 2 — اختر الأنشطة (${selectedExpIds.length} مختارة)`
+                    : language === 'de'
+                    ? `Schritt 2 — Aktivitäten wählen (${selectedExpIds.length} gewählt)`
+                    : `Step 2 — Choose Your Experiences (${selectedExpIds.length} Selected)`}
+                </span>
               </h3>
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
                 {categories.map((cat) => (
@@ -441,7 +574,23 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
                     </div>
 
                     <div className="mt-4 pt-2 border-t border-[#EAE4D9] flex items-center justify-between text-[11px] font-semibold text-slate-500">
-                      <span>{isSelected ? '✓ Added to Trip' : '+ Click to Add'}</span>
+                      <span>
+                        {isSelected
+                          ? language === 'ru'
+                            ? '✓ Добавлено в тур'
+                            : language === 'ar'
+                            ? '✓ تمت الإضافة للرحلة'
+                            : language === 'de'
+                            ? '✓ Zur Reise hinzugefügt'
+                            : '✓ Added to Trip'
+                          : language === 'ru'
+                          ? '+ Нажмите, чтобы добавить'
+                          : language === 'ar'
+                          ? '+ اضغط للإضافة'
+                          : language === 'de'
+                          ? '+ Klicken zum Hinzufügen'
+                          : '+ Click to Add'}
+                      </span>
                     </div>
                   </div>
                 );
@@ -455,7 +604,7 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
                 className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl border border-[#EAE4D9] text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
               >
                 <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
-                <span>Back</span>
+                <span>{language === 'ru' ? 'Назад' : language === 'ar' ? 'رجوع' : language === 'de' ? 'Zurück' : 'Back'}</span>
               </button>
 
               <button
@@ -463,7 +612,15 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
                 onClick={handleNextFromStep2}
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#0D1B2A] to-[#1B263B] text-[#D4AF37] font-bold text-xs sm:text-sm border border-[#D4AF37]/50 shadow-md hover:brightness-110 transition cursor-pointer"
               >
-                <span>Customize Schedule ({selectedExpIds.length})</span>
+                <span>
+                  {language === 'ru'
+                    ? `Настроить расписание (${selectedExpIds.length})`
+                    : language === 'ar'
+                    ? `تخصيص الجدول (${selectedExpIds.length})`
+                    : language === 'de'
+                    ? `Zeitplan festlegen (${selectedExpIds.length})`
+                    : `Customize Schedule (${selectedExpIds.length})`}
+                </span>
                 <ArrowRight className="w-4 h-4 rtl:rotate-180" />
               </button>
             </div>
@@ -477,11 +634,25 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
           <div className="bg-white rounded-2xl border border-[#EAE4D9] p-6 sm:p-8 space-y-6 shadow-xs">
             <h3 className="text-lg font-bold text-[#0D1B2A] flex items-center gap-2 border-b border-[#F0ECE1] pb-3">
               <Clock className="w-5 h-5 text-[#D4AF37]" />
-              <span>Step 3 — Schedule & Customize Your Selected Experiences</span>
+              <span>
+                {language === 'ru'
+                  ? 'Шаг 3 — Расписание выбранных активностей'
+                  : language === 'ar'
+                  ? 'الخطوة 3 — جدولة وتخصيص الأنشطة المختارة'
+                  : language === 'de'
+                  ? 'Schritt 3 — Zeitplan für Ihre Aktivitäten'
+                  : 'Step 3 — Schedule & Customize Your Selected Experiences'}
+              </span>
             </h3>
 
             <p className="text-xs text-slate-600">
-              Assign a preferred date or specific notes for each selected activity in your custom itinerary.
+              {language === 'ru'
+                ? 'Укажите желаемую дату или примечания для каждой выбранной активности вашего маршрута.'
+                : language === 'ar'
+                ? 'حدد التاريخ المفضل أو الملاحظات الخاصة لكل نشاط في برنامج رحلتك المخصصة.'
+                : language === 'de'
+                ? 'Legen Sie ein Wunschdatum oder Hinweise für jede ausgewählte Aktivität fest.'
+                : 'Assign a preferred date or specific notes for each selected activity in your custom itinerary.'}
             </p>
 
             <div className="space-y-4 max-h-[450px] overflow-y-auto pr-1">
@@ -505,13 +676,15 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
                         className="text-rose-600 hover:text-rose-800 text-xs font-semibold flex items-center gap-1 cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                        <span>Remove</span>
+                        <span>{language === 'ru' ? 'Удалить' : language === 'ar' ? 'إزالة' : language === 'de' ? 'Entfernen' : 'Remove'}</span>
                       </button>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-700 mb-1">Activity Date</label>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          {language === 'ru' ? 'Дата активности' : language === 'ar' ? 'تاريخ النشاط' : language === 'de' ? 'Datum der Aktivität' : 'Activity Date'}
+                        </label>
                         <input
                           type="date"
                           value={details.date}
@@ -524,7 +697,9 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
                       </div>
 
                       <div>
-                        <label className="block text-[11px] font-bold text-slate-700 mb-1">Specific Notes / Time</label>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          {language === 'ru' ? 'Пожелания / время' : language === 'ar' ? 'ملاحظات / الوقت المفضل' : language === 'de' ? 'Hinweise / Uhrzeit' : 'Specific Notes / Time'}
+                        </label>
                         <input
                           type="text"
                           value={details.notes}
@@ -532,7 +707,15 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
                             ...experienceDetails,
                             [id]: { ...details, notes: e.target.value }
                           })}
-                          placeholder="e.g. Morning session around 09:00 AM"
+                          placeholder={
+                            language === 'ru'
+                              ? 'Напр., Утренний выезд около 09:00'
+                              : language === 'ar'
+                              ? 'مثال: فترة صباحية حوالي 09:00 صباحاً'
+                              : language === 'de'
+                              ? 'z. B. Morgens gegen 09:00 Uhr'
+                              : 'e.g. Morning session around 09:00 AM'
+                          }
                           className="w-full px-3 py-2 rounded-lg border border-[#D5CDBD] text-xs bg-white text-slate-900 focus:outline-hidden focus:border-[#D4AF37]"
                         />
                       </div>
@@ -549,7 +732,7 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
                 className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl border border-[#EAE4D9] text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
               >
                 <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
-                <span>Back</span>
+                <span>{language === 'ru' ? 'Назад' : language === 'ar' ? 'رجوع' : language === 'de' ? 'Zurück' : 'Back'}</span>
               </button>
 
               <button
@@ -557,7 +740,7 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
                 onClick={handleNextFromStep3}
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#0D1B2A] to-[#1B263B] text-[#D4AF37] font-bold text-xs sm:text-sm border border-[#D4AF37]/50 shadow-md hover:brightness-110 transition cursor-pointer"
               >
-                <span>Continue to Customer Details</span>
+                <span>{t('booking.nextToCustomer', 'Continue to Customer Details')}</span>
                 <ArrowRight className="w-4 h-4 rtl:rotate-180" />
               </button>
             </div>
@@ -569,32 +752,55 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
         ======================================================== */}
         {currentStep === 4 && (
           <form onSubmit={handleNextFromStep4} className="bg-white rounded-2xl border border-[#EAE4D9] p-6 sm:p-8 space-y-6 shadow-xs">
+            {/* Honeypot anti-spam */}
+            <div style={{ display: 'none', position: 'absolute', left: '-9999px' }} aria-hidden="true">
+              <label htmlFor="trip_company_website_url">Do not fill this</label>
+              <input
+                type="text"
+                id="trip_company_website_url"
+                name="trip_company_website_url"
+                value={honeypot}
+                onChange={(e) => setHoneypot(e.target.value)}
+                tabIndex={-1}
+                autoComplete="off"
+              />
+            </div>
+
             <h3 className="text-lg font-bold text-[#0D1B2A] flex items-center gap-2 border-b border-[#F0ECE1] pb-3">
               <User className="w-5 h-5 text-[#D4AF37]" />
-              <span>Step 4 — Customer Information</span>
+              <span>
+                {language === 'ru'
+                  ? 'Шаг 4 — Контактные данные'
+                  : language === 'ar'
+                  ? 'الخطوة 4 — بيانات العميل'
+                  : language === 'de'
+                  ? 'Schritt 4 — Kundendaten'
+                  : 'Step 4 — Customer Information'}
+              </span>
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">Full Name *</label>
+                <label className="block text-xs font-bold text-slate-800 mb-1">{t('booking.name')} *</label>
                 <input
                   type="text"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="e.g. Sarah Jenkins"
+                  placeholder={t('booking.namePlaceholder')}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#D5CDBD] text-xs font-medium text-slate-900 bg-white focus:outline-hidden focus:border-[#D4AF37]"
                 />
                 {errors.customerName && <p className="text-[11px] text-rose-600 mt-1">{errors.customerName}</p>}
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">Email Address *</label>
+                <label className="block text-xs font-bold text-slate-800 mb-1">{t('booking.email')} *</label>
                 <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@example.com"
+                  placeholder={t('booking.emailPlaceholder')}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#D5CDBD] text-xs font-medium text-slate-900 bg-white focus:outline-hidden focus:border-[#D4AF37]"
+                  dir="ltr"
                 />
                 {errors.email && <p className="text-[11px] text-rose-600 mt-1">{errors.email}</p>}
               </div>
@@ -602,24 +808,27 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">Phone / WhatsApp Number *</label>
+                <label className="block text-xs font-bold text-slate-800 mb-1">{t('booking.phone')} *</label>
                 <input
                   type="text"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+49 170 1234567"
+                  placeholder={t('booking.phonePlaceholder')}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#D5CDBD] text-xs font-medium text-slate-900 bg-white focus:outline-hidden focus:border-[#D4AF37]"
+                  dir="ltr"
                 />
                 {errors.phone && <p className="text-[11px] text-rose-600 mt-1">{errors.phone}</p>}
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">Country / Nationality</label>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  {language === 'ru' ? 'Страна / гражданство' : language === 'ar' ? 'الدولة / الجنسية' : language === 'de' ? 'Land / Nationalität' : 'Country / Nationality'}
+                </label>
                 <input
                   type="text"
                   value={country}
                   onChange={(e) => setCountry(e.target.value)}
-                  placeholder="e.g. Germany, UK, Switzerland"
+                  placeholder={t('booking.nationalityPlaceholder')}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-[#D5CDBD] text-xs font-medium text-slate-900 bg-white focus:outline-hidden focus:border-[#D4AF37]"
                 />
               </div>
@@ -632,14 +841,22 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
                 className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl border border-[#EAE4D9] text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
               >
                 <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
-                <span>Back</span>
+                <span>{language === 'ru' ? 'Назад' : language === 'ar' ? 'رجوع' : language === 'de' ? 'Zurück' : 'Back'}</span>
               </button>
 
               <button
                 type="submit"
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#0D1B2A] to-[#1B263B] text-[#D4AF37] font-bold text-xs sm:text-sm border border-[#D4AF37]/50 shadow-md hover:brightness-110 transition cursor-pointer"
               >
-                <span>Review Custom Trip</span>
+                <span>
+                  {language === 'ru'
+                    ? 'Проверить заявку'
+                    : language === 'ar'
+                    ? 'مراجعة الرحلة المخصصة'
+                    : language === 'de'
+                    ? 'Wunschreise prüfen'
+                    : 'Review Custom Trip'}
+                </span>
                 <ArrowRight className="w-4 h-4 rtl:rotate-180" />
               </button>
             </div>
@@ -653,29 +870,56 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
           <div className="bg-white rounded-2xl border border-[#EAE4D9] p-6 sm:p-8 space-y-6 shadow-xs">
             <h3 className="text-lg font-bold text-[#0D1B2A] flex items-center gap-2 border-b border-[#F0ECE1] pb-3">
               <ShieldCheck className="w-5 h-5 text-[#D4AF37]" />
-              <span>Step 5 — Review Your Custom Trip Request</span>
+              <span>
+                {language === 'ru'
+                  ? 'Шаг 5 — Проверьте ваш индивидуальный тур'
+                  : language === 'ar'
+                  ? 'الخطوة 5 — مراجعة طلب الرحلة المخصصة'
+                  : language === 'de'
+                  ? 'Schritt 5 — Anfrage überprüfen'
+                  : 'Step 5 — Review Your Custom Trip Request'}
+              </span>
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-[#FBF9F5] p-5 rounded-xl border border-[#EAE4D9] text-xs">
               <div className="space-y-2">
-                <div><span className="font-semibold text-slate-500">Customer Name:</span> <strong className="text-slate-900">{customerName}</strong></div>
-                <div><span className="font-semibold text-slate-500">Email:</span> <strong className="text-slate-900">{email}</strong></div>
-                <div><span className="font-semibold text-slate-500">Phone / WhatsApp:</span> <strong className="text-slate-900">{phone}</strong></div>
-                <div><span className="font-semibold text-slate-500">Country:</span> <strong className="text-slate-900">{country}</strong></div>
+                <div><span className="font-semibold text-slate-500">{t('booking.name')}:</span> <strong className="text-slate-900">{customerName}</strong></div>
+                <div><span className="font-semibold text-slate-500">{t('booking.email')}:</span> <strong className="text-slate-900">{email}</strong></div>
+                <div><span className="font-semibold text-slate-500">{t('booking.phone')}:</span> <strong className="text-slate-900">{phone}</strong></div>
+                <div><span className="font-semibold text-slate-500">{t('booking.nationality')}:</span> <strong className="text-slate-900">{country}</strong></div>
               </div>
 
               <div className="space-y-2">
-                <div><span className="font-semibold text-slate-500">Trip Dates:</span> <strong className="text-slate-900">{startDate} to {endDate}</strong></div>
-                <div><span className="font-semibold text-slate-500">Passengers:</span> <strong className="text-slate-900">{passengerCount} Passenger(s)</strong></div>
-                <div><span className="font-semibold text-slate-500">Pickup Location:</span> <strong className="text-slate-900">{pickup}</strong></div>
-                <div><span className="font-semibold text-slate-500">Accommodation:</span> <strong className="text-slate-900">{accommodation}</strong></div>
+                <div>
+                  <span className="font-semibold text-slate-500">
+                    {language === 'ru' ? 'Даты поездки:' : language === 'ar' ? 'تواريخ الرحلة:' : language === 'de' ? 'Reisedaten:' : 'Trip Dates:'}
+                  </span>{' '}
+                  <strong className="text-slate-900">{startDate} — {endDate}</strong>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-500">{t('booking.passengersCount')}:</span>{' '}
+                  <strong className="text-slate-900">{passengerCount}</strong>
+                </div>
+                <div><span className="font-semibold text-slate-500">{t('booking.pickupLocation')}:</span> <strong className="text-slate-900">{pickup}</strong></div>
+                <div>
+                  <span className="font-semibold text-slate-500">
+                    {language === 'ru' ? 'Отель / проживание:' : language === 'ar' ? 'الإقامة:' : language === 'de' ? 'Unterkunft:' : 'Accommodation:'}
+                  </span>{' '}
+                  <strong className="text-slate-900">{accommodation}</strong>
+                </div>
               </div>
             </div>
 
             {/* Selected Experiences List */}
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-[#0D1B2A] mb-3">
-                Selected Experiences ({selectedExpIds.length}):
+                {language === 'ru'
+                  ? `Выбранные активности (${selectedExpIds.length}):`
+                  : language === 'ar'
+                  ? `الأنشطة المختارة (${selectedExpIds.length}):`
+                  : language === 'de'
+                  ? `Ausgewählte Aktivitäten (${selectedExpIds.length}):`
+                  : `Selected Experiences (${selectedExpIds.length}):`}
               </h4>
               <div className="space-y-2">
                 {selectedExpIds.map((id) => {
@@ -685,7 +929,11 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
                     <div key={id} className="p-3 rounded-lg bg-white border border-[#EAE4D9] flex items-center justify-between text-xs">
                       <div>
                         <strong className="text-[#0D1B2A]">{exp ? getLocalizedExpTitle(exp) : id}</strong>
-                        {details?.notes && <span className="block text-[11px] text-slate-500">Note: {details.notes}</span>}
+                        {details?.notes && (
+                          <span className="block text-[11px] text-slate-500">
+                            {language === 'ru' ? 'Примечание:' : language === 'ar' ? 'ملاحظة:' : 'Note:'} {details.notes}
+                          </span>
+                        )}
                       </div>
                       <span className="text-[11px] font-semibold text-[#D4AF37] bg-[#0D1B2A] px-2 py-0.5 rounded">
                         {details?.date || startDate}
@@ -698,18 +946,44 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
 
             {specialRequests && (
               <div className="p-3 rounded-lg bg-[#FBF9F5] border border-[#EAE4D9] text-xs">
-                <span className="font-bold text-slate-700 block mb-1">Special Requirements:</span>
+                <span className="font-bold text-slate-700 block mb-1">{t('booking.notes')}:</span>
                 <p className="text-slate-600">{specialRequests}</p>
               </div>
             )}
 
-            {/* Pricing Notice */}
-            <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1.5">
-              <div className="font-bold text-sm flex items-center gap-2">
-                <span>Price: To be confirmed by PEGASUS</span>
+            {/* Pricing Notice & Official Benchmarks */}
+            <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200 text-amber-950 text-xs space-y-2">
+              <div className="font-bold text-sm flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5 text-[#0D1B2A]">
+                  <Sparkles className="w-4 h-4 text-[#D4AF37]" />
+                  <span>
+                    {language === 'ru'
+                      ? 'Расчёт индивидуального тура'
+                      : language === 'ar'
+                      ? 'تسعير الرحلة المخصصة'
+                      : language === 'de'
+                      ? 'Angebot für Ihre Wunschreise'
+                      : 'Custom Trip Quote'}
+                  </span>
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-[#0D1B2A] text-[#D4AF37] text-[11px] font-bold">
+                  {language === 'ru'
+                    ? 'Проверяется консьержем'
+                    : language === 'ar'
+                    ? 'قيد المراجعة من الإدارة'
+                    : language === 'de'
+                    ? 'Wird vom Concierge geprüft'
+                    : 'Reviewed by Concierge'}
+                </span>
               </div>
-              <p className="text-amber-800 leading-relaxed">
-                Your trip will be reviewed by our team. We will calculate the best available price based on your selected experiences, transportation and availability.
+              <p className="text-slate-700 leading-relaxed text-[11px]">
+                {language === 'ru'
+                  ? 'Наш консьерж рассчитает персональную стоимость на основе вашего маршрута и выбранных активностей.'
+                  : language === 'ar'
+                  ? 'يقوم فريق الإدارة بدراسة خط سيرك المخصص وتحديد السعر النهائي بناءً على الأنشطة المختارة والمسافات.'
+                  : language === 'de'
+                  ? 'Unser Concierge berechnet Ihren individuellen Gesamtpreis basierend auf Ihrer Wunschroute und Ihren ausgewählten Aktivitäten.'
+                  : 'Our concierge calculates your personalized quote based on your custom destinations and selected experiences.'}
               </p>
             </div>
 
@@ -720,7 +994,7 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
                 className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl border border-[#EAE4D9] text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
               >
                 <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
-                <span>Back</span>
+                <span>{language === 'ru' ? 'Назад' : language === 'ar' ? 'رجوع' : language === 'de' ? 'Zurück' : 'Back'}</span>
               </button>
 
               <button
@@ -729,7 +1003,23 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
                 onClick={handleFinalSubmit}
                 className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#ECC974] text-[#0D1B2A] font-bold text-xs sm:text-sm shadow-lg shadow-[#D4AF37]/20 hover:brightness-105 transition cursor-pointer disabled:opacity-50"
               >
-                <span>{loading ? 'Submitting Request...' : 'Send Trip Request'}</span>
+                <span>
+                  {loading
+                    ? language === 'ru'
+                      ? 'Отправка...'
+                      : language === 'ar'
+                      ? 'جاري الإرسال...'
+                      : language === 'de'
+                      ? 'Wird gesendet...'
+                      : 'Submitting Request...'
+                    : language === 'ru'
+                    ? 'Отправить заявку'
+                    : language === 'ar'
+                    ? 'إرسال الطلب'
+                    : language === 'de'
+                    ? 'Anfrage absenden'
+                    : 'Send Trip Request'}
+                </span>
                 <ArrowRight className="w-4 h-4 rtl:rotate-180" />
               </button>
             </div>
@@ -747,21 +1037,47 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
 
             <div className="space-y-2">
               <span className="text-xs font-bold uppercase tracking-wider text-[#D4AF37] bg-[#0D1B2A] px-3 py-1 rounded-full">
-                Status: Pending Review
+                {language === 'ru'
+                  ? 'Статус: Ожидает проверки'
+                  : language === 'ar'
+                  ? 'الحالة: قيد المراجعة'
+                  : language === 'de'
+                  ? 'Status: Prüfung ausstehend'
+                  : 'Status: Pending Review'}
               </span>
               <h2 className="text-2xl sm:text-3xl font-extrabold text-[#0D1B2A] font-heading">
-                Custom Trip Request Received!
+                {language === 'ru'
+                  ? 'Заявка на индивидуальный тур получена!'
+                  : language === 'ar'
+                  ? 'تم استلام طلب رحلتك المخصصة!'
+                  : language === 'de'
+                  ? 'Anfrage für Wunschreise erhalten!'
+                  : 'Custom Trip Request Received!'}
               </h2>
               <p className="text-slate-600 text-xs sm:text-sm max-w-lg mx-auto">
-                Thank you, {submittedTrip.customerName}. Your tailored trip itinerary has been submitted to PEGASUS dispatch. We will evaluate your selected experiences and contact you shortly with the final price.
+                {language === 'ru'
+                  ? `Спасибо, ${submittedTrip.customerName}. Ваш индивидуальный маршрут отправлен диспетчеру PEGASUS. Мы проверим выбранные активности и вскоре свяжемся с вами с итоговой ценой.`
+                  : language === 'ar'
+                  ? `شكراً لك ${submittedTrip.customerName}. تم إرسال برنامج رحلتك المخصص إلى فريق بيجاسوس. سنقوم بدراسة الأنشطة المختارة والتواصل معك قريباً بالسعر النهائي.`
+                  : language === 'de'
+                  ? `Vielen Dank, ${submittedTrip.customerName}. Ihre individuelle Reiseroute wurde an PEGASUS übermittelt. Wir prüfen die Auswahl und melden uns zeitnah mit dem Gesamtpreis.`
+                  : `Thank you, ${submittedTrip.customerName}. Your tailored trip itinerary has been submitted to PEGASUS dispatch. We will evaluate your selected experiences and contact you shortly with the final price.`}
               </p>
             </div>
 
             {/* Reference Box */}
             <div className="p-4 rounded-xl bg-[#FBF9F5] border border-[#EAE4D9] max-w-md mx-auto flex items-center justify-between gap-3">
               <div className="text-left rtl:text-right">
-                <span className="text-[10px] uppercase font-bold text-slate-500 block">Trip Reference Number</span>
-                <span className="text-base sm:text-lg font-mono font-bold text-[#0D1B2A]">{submittedTrip.referenceNumber}</span>
+                <span className="text-[10px] uppercase font-bold text-slate-500 block">
+                  {language === 'ru'
+                    ? 'Номер заявки на тур'
+                    : language === 'ar'
+                    ? 'الرقم المرجعي للرحلة'
+                    : language === 'de'
+                    ? 'Reise-Referenznummer'
+                    : 'Trip Reference Number'}
+                </span>
+                <span className="text-base sm:text-lg font-mono font-bold text-[#0D1B2A]" dir="ltr">{submittedTrip.referenceNumber}</span>
               </div>
               <button
                 type="button"
@@ -769,7 +1085,11 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#0D1B2A] text-[#D4AF37] text-xs font-bold hover:bg-[#1B263B] transition cursor-pointer"
               >
                 {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copied ? 'Copied' : 'Copy'}</span>
+                <span>
+                  {copied
+                    ? t('booking.copied')
+                    : t('booking.copyRef')}
+                </span>
               </button>
             </div>
 
@@ -778,22 +1098,38 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
               {onTrackTrip && (
                 <button
                   type="button"
-                  onClick={() => onTrackTrip(submittedTrip.referenceNumber)}
+                  onClick={() => onTrackTrip(submittedTrip.referenceNumber, submittedTrip.email)}
                   className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#0D1B2A] text-[#D4AF37] font-bold text-xs sm:text-sm border border-[#D4AF37]/50 hover:bg-[#1B263B] transition cursor-pointer"
                 >
                   <Compass className="w-4 h-4" />
-                  <span>Track Trip Request</span>
+                  <span>
+                    {language === 'ru'
+                      ? 'Отследить заявку'
+                      : language === 'ar'
+                      ? 'تتبع طلب الرحلة'
+                      : language === 'de'
+                      ? 'Anfrage verfolgen'
+                      : 'Track Trip Request'}
+                  </span>
                 </button>
               )}
 
               <a
-                href={`https://wa.me/201000000000?text=Hello%20PEGASUS!%20I%20submitted%20a%20custom%20trip%20request%20with%20reference%20${submittedTrip.referenceNumber}`}
+                href={getAdminCustomTripWhatsAppAlertUrl(submittedTrip)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#25D366] text-white font-bold text-xs sm:text-sm hover:brightness-105 transition"
+                className="btn-shimmer-wrap inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white font-black text-xs sm:text-sm shadow-md transition"
               >
-                <Phone className="w-4 h-4" />
-                <span>Contact via WhatsApp</span>
+                <Phone className="w-4 h-4 fill-current" />
+                <span>
+                  {language === 'ru'
+                    ? 'Отправить детали тура консьержу в WhatsApp'
+                    : language === 'ar'
+                    ? 'إرسال تفاصيل الرحلة للمشرف على واتساب للتسعير والتأكيد'
+                    : language === 'de'
+                    ? 'Reisedetails per WhatsApp an Concierge senden'
+                    : 'Send Trip Details to Concierge on WhatsApp'}
+                </span>
               </a>
 
               {onExploreOther && (
@@ -802,7 +1138,15 @@ export const CustomTripBuilderPage: React.FC<CustomTripBuilderPageProps> = ({
                   onClick={onExploreOther}
                   className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white border border-[#EAE4D9] text-slate-700 font-bold text-xs sm:text-sm hover:bg-slate-50 transition cursor-pointer"
                 >
-                  <span>Return to Home</span>
+                  <span>
+                    {language === 'ru'
+                      ? 'Вернуться на главную'
+                      : language === 'ar'
+                      ? 'العودة للرئيسية'
+                      : language === 'de'
+                      ? 'Zurück zur Startseite'
+                      : 'Return to Home'}
+                  </span>
                 </button>
               )}
             </div>

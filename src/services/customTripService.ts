@@ -7,41 +7,56 @@ import {
   updateDoc,
   deleteDoc,
   query,
-  orderBy,
-  onSnapshot
+  orderBy
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { CustomTripRequest, CustomTripStatus } from '../types';
-import { hashIdentifier, hashPhone } from './bookingService';
+import {
+  CustomTripRequest,
+  CustomTripPublicStatus,
+  CustomTripStatus,
+  CustomTripAdminPricing,
+} from '../types';
+import { maskName } from './bookingService';
+import { computeVerifyEmailHash, computeVerifyPhoneHash } from '../utils/trackingVerification';
 
 const COLLECTION_NAME = 'customTripRequests';
+const PUBLIC_STATUS_COLLECTION = 'customTripStatus';
+const ADMIN_PRICING_COLLECTION = 'customTripAdminPricing';
 
+/**
+ * Generates an unguessable cryptographically secure custom trip reference.
+ * 8 alphanumeric chars from safe base32 alphabet (no 0, O, 1, I, L).
+ */
 export function generateTripReference(): string {
   const year = new Date().getFullYear();
-  const randomChars = Math.random().toString(36).substring(2, 7).toUpperCase();
-  return `PEG-TRIP-${year}-${randomChars}`;
+  const alphabet = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+  const array = new Uint8Array(8);
+  crypto.getRandomValues(array);
+  let randomPart = '';
+  for (let i = 0; i < array.length; i++) {
+    randomPart += alphabet[array[i] % alphabet.length];
+  }
+  return `PEG-TRIP-${year}-${randomPart}`;
 }
 
 export async function createCustomTripRequest(
   tripData: Omit<CustomTripRequest, 'id' | 'status' | 'referenceNumber' | 'createdAt' | 'updatedAt' | 'pricing'>
 ): Promise<CustomTripRequest> {
   const referenceNumber = generateTripReference();
-  const docRef = doc(collection(db, COLLECTION_NAME));
+  const docRef = doc(db, COLLECTION_NAME, referenceNumber);
+  const statusDocRef = doc(db, PUBLIC_STATUS_COLLECTION, referenceNumber);
   const now = new Date().toISOString();
 
-  // Enforce max 2 passengers as per business model
-  const passengerCountInt = Math.min(2, Math.max(1, Math.round(Number(tripData.passengerCount) || 1)));
-
-  const emailHash = await hashIdentifier(tripData.email);
-  const phoneHash = await hashPhone(tripData.phone);
+  // Enforce max 4 passengers
+  const passengerCountInt = Math.min(4, Math.max(1, Math.round(Number(tripData.passengerCount) || 1)));
 
   const newRequest: CustomTripRequest = {
-    id: docRef.id,
+    id: referenceNumber,
     referenceNumber,
     customerName: tripData.customerName.trim(),
     email: tripData.email.trim(),
     phone: tripData.phone.trim(),
-    country: tripData.country.trim() || 'International',
+    country: tripData.country?.trim() || 'International',
     startDate: tripData.startDate,
     endDate: tripData.endDate || tripData.startDate,
     passengerCount: passengerCountInt,
@@ -54,14 +69,39 @@ export async function createCustomTripRequest(
       currency: 'EUR',
     },
     status: 'Pending Review',
-    emailHash,
-    phoneHash,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  const [verifyEmailHash, verifyPhoneHash] = await Promise.all([
+    computeVerifyEmailHash(referenceNumber, tripData.email),
+    computeVerifyPhoneHash(referenceNumber, tripData.phone),
+  ]);
+
+  // Sanitized public tracking card (Zero PII)
+  const publicStatusDoc: CustomTripPublicStatus = {
+    referenceNumber,
+    maskedCustomerName: maskName(tripData.customerName),
+    startDate: tripData.startDate,
+    endDate: tripData.endDate || tripData.startDate,
+    passengerCount: passengerCountInt,
+    pickup: tripData.pickup.trim(),
+    accommodation: tripData.accommodation.trim(),
+    destination: tripData.destination?.trim() || '',
+    experiences: tripData.experiences || [],
+    pricing: {
+      currency: 'EUR',
+    },
+    status: 'Pending Review',
+    verifyEmailHash,
+    verifyPhoneHash,
     createdAt: now,
     updatedAt: now,
   };
 
   try {
     await setDoc(docRef, newRequest);
+    await setDoc(statusDocRef, publicStatusDoc);
     return newRequest;
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, COLLECTION_NAME);
@@ -69,19 +109,18 @@ export async function createCustomTripRequest(
   }
 }
 
-export async function getCustomTripByReference(referenceNumber: string): Promise<CustomTripRequest | null> {
+export async function getCustomTripByReference(referenceNumber: string): Promise<CustomTripPublicStatus | null> {
+  const cleanRef = referenceNumber.trim().toUpperCase();
+  if (!cleanRef) return null;
+
   try {
-    const q = query(collection(db, COLLECTION_NAME));
-    const snapshot = await getDocs(q);
-    for (const d of snapshot.docs) {
-      const data = d.data() as CustomTripRequest;
-      if (data.referenceNumber?.toLowerCase() === referenceNumber.trim().toLowerCase()) {
-        return { ...data, id: d.id };
-      }
+    const snap = await getDoc(doc(db, PUBLIC_STATUS_COLLECTION, cleanRef));
+    if (snap.exists()) {
+      return { ...(snap.data() as CustomTripPublicStatus), id: snap.id };
     }
     return null;
   } catch (error) {
-    handleFirestoreError(error, OperationType.GET, COLLECTION_NAME);
+    handleFirestoreError(error, OperationType.GET, `${PUBLIC_STATUS_COLLECTION}/${cleanRef}`);
     return null;
   }
 }
@@ -97,39 +136,131 @@ export async function getAllCustomTripRequests(): Promise<CustomTripRequest[]> {
   }
 }
 
+/**
+ * Updates custom trip pricing.
+ * Internal cost and margin are stored STRICTLY in admin-only collection /customTripAdminPricing.
+ * Only finalPrice and currency are written to the master request and sanitized public status card.
+ */
 export async function updateCustomTripPricing(
-  tripId: string,
+  referenceNumber: string,
   internalCost: number,
   margin: number,
-  finalPrice: number
+  finalPrice: number,
+  currency: string = 'EUR'
 ): Promise<void> {
+  const cleanRef = referenceNumber.trim().toUpperCase();
+  const now = new Date().toISOString();
+
   try {
-    const docRef = doc(db, COLLECTION_NAME, tripId);
+    // 1. Save confidential admin pricing in admin-only collection
+    const adminPricingRef = doc(db, ADMIN_PRICING_COLLECTION, cleanRef);
+    const adminPricingData: CustomTripAdminPricing = {
+      referenceNumber: cleanRef,
+      internalCost: Number(internalCost) || 0,
+      margin: Number(margin) || 0,
+      finalPrice: Number(finalPrice) || 0,
+      currency: currency || 'EUR',
+      updatedAt: now,
+    };
+    await setDoc(adminPricingRef, adminPricingData);
+
+    // 2. Update master document
+    const docRef = doc(db, COLLECTION_NAME, cleanRef);
     await updateDoc(docRef, {
-      'pricing.internalCost': Number(internalCost) || 0,
-      'pricing.margin': Number(margin) || 0,
       'pricing.finalPrice': Number(finalPrice) || 0,
+      'pricing.currency': currency || 'EUR',
       status: 'Price Sent',
-      updatedAt: new Date().toISOString(),
+      updatedAt: now,
+    });
+
+    // 3. Synchronize sanitized public tracking card
+    const statusDocRef = doc(db, PUBLIC_STATUS_COLLECTION, cleanRef);
+    await setDoc(
+      statusDocRef,
+      {
+        pricing: {
+          finalPrice: Number(finalPrice) || 0,
+          currency: currency || 'EUR',
+        },
+        status: 'Price Sent',
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `${COLLECTION_NAME}/${cleanRef}`);
+    throw error;
+  }
+}
+
+export const saveCustomTripAdminPricing = updateCustomTripPricing;
+
+export async function getCustomTripAdminPricing(referenceNumber: string): Promise<CustomTripAdminPricing | null> {
+  const cleanRef = referenceNumber.trim().toUpperCase();
+  try {
+    const snap = await getDoc(doc(db, ADMIN_PRICING_COLLECTION, cleanRef));
+    if (snap.exists()) {
+      return snap.data() as CustomTripAdminPricing;
+    }
+    return null;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, `${ADMIN_PRICING_COLLECTION}/${cleanRef}`);
+    return null;
+  }
+}
+
+/**
+ * Customer action to approve the quoted price on the tracking page.
+ */
+export async function approveCustomTripPrice(referenceNumber: string): Promise<void> {
+  const cleanRef = referenceNumber.trim().toUpperCase();
+  const now = new Date().toISOString();
+  try {
+    await updateDoc(doc(db, PUBLIC_STATUS_COLLECTION, cleanRef), {
+      status: 'Customer Approved',
+      updatedAt: now,
+    });
+    await updateDoc(doc(db, COLLECTION_NAME, cleanRef), {
+      status: 'Customer Approved',
+      updatedAt: now,
     });
   } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, `${COLLECTION_NAME}/${tripId}`);
+    handleFirestoreError(error, OperationType.UPDATE, `${PUBLIC_STATUS_COLLECTION}/${cleanRef}`);
     throw error;
   }
 }
 
 export async function updateCustomTripStatus(
-  tripId: string,
-  status: CustomTripStatus
+  referenceNumber: string,
+  status: CustomTripStatus,
+  customerMessage?: string
 ): Promise<void> {
+  const cleanRef = referenceNumber.trim().toUpperCase();
+  const now = new Date().toISOString();
   try {
-    const docRef = doc(db, COLLECTION_NAME, tripId);
-    await updateDoc(docRef, {
+    const updatePayload: Record<string, any> = {
       status,
-      updatedAt: new Date().toISOString(),
-    });
+      updatedAt: now,
+    };
+    if (customerMessage !== undefined) {
+      updatePayload.customerMessage = customerMessage;
+    }
+    await updateDoc(doc(db, COLLECTION_NAME, cleanRef), updatePayload);
+    await setDoc(doc(db, PUBLIC_STATUS_COLLECTION, cleanRef), updatePayload, { merge: true });
   } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, `${COLLECTION_NAME}/${tripId}`);
+    handleFirestoreError(error, OperationType.UPDATE, `${COLLECTION_NAME}/${cleanRef}`);
+    throw error;
+  }
+}
+
+export async function deleteCustomTripRequest(referenceNumber: string): Promise<void> {
+  const cleanRef = referenceNumber.trim().toUpperCase();
+  try {
+    await deleteDoc(doc(db, COLLECTION_NAME, cleanRef));
+    await deleteDoc(doc(db, PUBLIC_STATUS_COLLECTION, cleanRef));
+    await deleteDoc(doc(db, ADMIN_PRICING_COLLECTION, cleanRef));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `${COLLECTION_NAME}/${cleanRef}`);
     throw error;
   }
 }

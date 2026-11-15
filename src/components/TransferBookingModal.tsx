@@ -10,8 +10,9 @@ interface TransferBookingModalProps {
   serviceType?: ServiceType;
   tourId?: string;
   tourTitle?: string;
+  initialPassengers?: number;
   onBookingSuccess?: (b: Booking) => void;
-  onTrackBooking?: (reference: string) => void;
+  onTrackBooking?: (reference: string, contact?: string) => void;
 }
 
 export const TransferBookingModal: React.FC<TransferBookingModalProps> = ({
@@ -20,10 +21,11 @@ export const TransferBookingModal: React.FC<TransferBookingModalProps> = ({
   serviceType = 'airport_pickup',
   tourId,
   tourTitle,
+  initialPassengers,
   onBookingSuccess,
   onTrackBooking,
 }) => {
-  const { t, direction } = useLanguage();
+  const { t, direction, language } = useLanguage();
 
   if (!isOpen) return null;
 
@@ -41,7 +43,9 @@ export const TransferBookingModal: React.FC<TransferBookingModalProps> = ({
             </div>
             <div>
               <h3 className="text-lg font-bold font-heading text-white">
-                {tourTitle ? `Book Tour: ${tourTitle}` : t('booking.title')}
+                {tourTitle
+                  ? `${language === 'ru' ? 'Бронирование тура' : language === 'ar' ? 'حجز رحلة' : language === 'de' ? 'Tour buchen' : 'Book Tour'}: ${tourTitle}`
+                  : t('booking.title')}
               </h3>
               <p className="text-xs text-slate-300">
                 {t('booking.subtitle')}
@@ -63,13 +67,14 @@ export const TransferBookingModal: React.FC<TransferBookingModalProps> = ({
             initialServiceType={serviceType}
             initialTourId={tourId}
             initialTourTitle={tourTitle}
+            initialPassengers={initialPassengers}
             onCancel={onClose}
             onSuccess={(b) => {
               if (onBookingSuccess) onBookingSuccess(b);
             }}
-            onTrackBooking={(ref) => {
+            onTrackBooking={(ref, contact) => {
               onClose();
-              if (onTrackBooking) onTrackBooking(ref);
+              if (onTrackBooking) onTrackBooking(ref, contact);
             }}
           />
         </div>

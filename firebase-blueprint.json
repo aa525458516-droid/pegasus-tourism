@@ -136,15 +136,133 @@
           "type": "string",
           "maxLength": 40
         },
-        "adminNotes": {
+        "customerMessage": {
           "type": "string",
           "maxLength": 1000
+        },
+        "verifyEmailHash": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "verifyPhoneHash": {
+          "type": "string",
+          "maxLength": 64
         },
         "updatedAt": {
           "type": "string"
         }
       },
-      "required": ["bookingReference", "status", "pickupDate", "destination"]
+      "required": ["bookingReference", "status", "pickupDate", "destination", "verifyEmailHash", "verifyPhoneHash"]
+    },
+    "CustomTripRequest": {
+      "title": "CustomTripRequest",
+      "description": "Confidential custom itinerary request with full PII, accessible only by admin",
+      "type": "object",
+      "properties": {
+        "referenceNumber": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "customerName": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "phone": {
+          "type": "string",
+          "maxLength": 50
+        },
+        "country": {
+          "type": "string",
+          "maxLength": 60
+        },
+        "startDate": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "endDate": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "passengerCount": {
+          "type": "integer"
+        },
+        "pickup": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "accommodation": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Pending Review", "Price Sent", "Customer Approved", "Confirmed", "Completed", "Cancelled"]
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": ["referenceNumber", "customerName", "phone", "email", "passengerCount", "startDate", "status"]
+    },
+    "CustomTripPublicStatus": {
+      "title": "CustomTripPublicStatus",
+      "description": "Sanitized public status card for custom trips with zero PII and salted verification hashes",
+      "type": "object",
+      "properties": {
+        "referenceNumber": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "maskedCustomerName": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "startDate": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "endDate": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "passengerCount": {
+          "type": "integer"
+        },
+        "pickup": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "accommodation": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "status": {
+          "type": "string",
+          "enum": ["Pending Review", "Price Sent", "Customer Approved", "Confirmed", "Completed", "Cancelled"]
+        },
+        "verifyEmailHash": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "verifyPhoneHash": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "type": "string"
+        }
+      },
+      "required": ["referenceNumber", "maskedCustomerName", "startDate", "passengerCount", "pickup", "accommodation", "status", "verifyEmailHash", "verifyPhoneHash"]
     },
     "Tour": {
       "title": "Tour",
@@ -325,7 +443,19 @@
       "schema": {
         "$ref": "#/entities/BookingPublicStatus"
       },
-      "description": "Public sanitized booking status card for reference lookups"
+      "description": "Public sanitized booking status card for verified reference lookups"
+    },
+    "/customTripRequests/{requestId}": {
+      "schema": {
+        "$ref": "#/entities/CustomTripRequest"
+      },
+      "description": "Confidential custom itinerary requests accessible only by admin"
+    },
+    "/customTripStatus/{refId}": {
+      "schema": {
+        "$ref": "#/entities/CustomTripPublicStatus"
+      },
+      "description": "Public sanitized custom trip status card for verified reference lookups"
     },
     "/tours/{tourId}": {
       "schema": {

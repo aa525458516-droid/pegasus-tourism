@@ -58,6 +58,130 @@ html {
   border: 1px solid #EAE4D9;
 }
 
+/* Tasteful Luxury Animations */
+@keyframes floatSubtle {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes goldGleam {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes softGlow {
+  0%, 100% {
+    box-shadow: 0 4px 20px -2px rgba(212, 175, 55, 0.25);
+  }
+  50% {
+    box-shadow: 0 8px 32px 6px rgba(212, 175, 55, 0.5);
+  }
+}
+
+@keyframes shimmerSweep {
+  0% {
+    transform: translateX(-100%) skewX(-15deg);
+  }
+  100% {
+    transform: translateX(250%) skewX(-15deg);
+  }
+}
+
+@keyframes gentlePulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.02);
+    opacity: 0.95;
+  }
+}
+
+@keyframes heroPan {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+}
+
+.animate-float-subtle {
+  animation: floatSubtle 4.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.animate-soft-glow {
+  animation: softGlow 3s ease-in-out infinite;
+}
+
+.animate-hero-pan {
+  animation: heroPan 18s ease-in-out infinite;
+}
+
+.animate-gentle-pulse {
+  animation: gentlePulse 3s ease-in-out infinite;
+}
+
+.gold-animated-gradient {
+  background: linear-gradient(120deg, #ECC974, #D4AF37, #FFF1D6, #D4AF37, #ECC974);
+  background-size: 300% 300%;
+  animation: goldGleam 6s ease infinite;
+}
+
+/* Premium Card Hover Lift & Golden Rim */
+.luxury-hover-card {
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s ease, border-color 0.35s ease;
+}
+
+.luxury-hover-card:hover {
+  transform: translateY(-6px);
+  border-color: #D4AF37 !important;
+  box-shadow: 0 20px 35px -10px rgba(13, 27, 42, 0.12), 0 0 20px rgba(212, 175, 55, 0.2);
+}
+
+/* Shimmer sweep effect on buttons */
+.btn-shimmer-wrap {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-shimmer-wrap::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+  animation: shimmerSweep 4.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-float-subtle,
+  .animate-soft-glow,
+  .animate-hero-pan,
+  .animate-gentle-pulse,
+  .gold-animated-gradient,
+  .luxury-hover-card,
+  .btn-shimmer-wrap::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 /* Leaflet Custom Luxury Popup */
 .pegasus-leaflet-popup .leaflet-popup-content-wrapper {
   background: #FFFFFF;

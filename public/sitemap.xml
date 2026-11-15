@@ -1,41 +1,152 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
-    <loc>https://pegasus-hurghada.com/</loc>
-    <lastmod>2026-11-06</lastmod>
-    <changefreq>daily</changefreq>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/en" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/de" />
+    <xhtml:link rel="alternate" hreflang="ar" href="https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/ar" />
+    <xhtml:link rel="alternate" hreflang="ru" href="https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/ru" />
+    <changefreq>weekly</changefreq>
     <priority>1.0</priority>
-    <xhtml:link rel="alternate" hreflang="en" href="https://pegasus-hurghada.com/?lang=en"/>
-    <xhtml:link rel="alternate" hreflang="de" href="https://pegasus-hurghada.com/?lang=de"/>
-    <xhtml:link rel="alternate" hreflang="ar" href="https://pegasus-hurghada.com/?lang=ar"/>
   </url>
   <url>
-    <loc>https://pegasus-hurghada.com/#transfers</loc>
-    <lastmod>2026-11-06</lastmod>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/en</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://pegasus-hurghada.com/#tours</loc>
-    <lastmod>2026-11-06</lastmod>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/de</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://pegasus-hurghada.com/#track</loc>
-    <lastmod>2026-11-06</lastmod>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/ar</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/ru</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/en/transfers</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/de/transfers</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/ar/transfers</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/ru/transfers</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/en/tours</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/de/tours</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/ar/tours</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/ru/tours</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/en/custom-trip</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://pegasus-hurghada.com/#about</loc>
-    <lastmod>2026-11-06</lastmod>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/de/custom-trip</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/ar/custom-trip</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/ru/custom-trip</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/en/about</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://pegasus-hurghada.com/#contact</loc>
-    <lastmod>2026-11-06</lastmod>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/de/about</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/ar/about</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/ru/about</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/en/gallery</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/de/gallery</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/ar/gallery</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/ru/gallery</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/en/contact</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/de/contact</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/ar/contact</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://ais-pre-oejty4ak63ftbcsvutyzx2-933776250699.europe-west2.run.app/ru/contact</loc>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>

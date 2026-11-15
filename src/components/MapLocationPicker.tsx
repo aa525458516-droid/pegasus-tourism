@@ -2,23 +2,30 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import L from 'leaflet';
 import { useLanguage } from '../context/LanguageContext';
 import { LocationDetails } from '../types';
-import { POI_LOCATIONS, POILocation, POICategory } from '../data/popularLocations';
+import { 
+  POI_LOCATIONS, 
+  POILocation, 
+  POICategory, 
+  EGYPT_REGIONS, 
+  EgyptRegion, 
+  RegionInfo 
+} from '../data/popularLocations';
 import { 
   MapPin, 
   Search, 
   X, 
   Check, 
-  Navigation, 
   Building, 
   Plane, 
-  Compass,
-  Anchor,
-  Sparkles,
-  Loader2,
-  ExternalLink,
-  SlidersHorizontal,
-  ChevronRight,
-  Info
+  Compass, 
+  Anchor, 
+  Sparkles, 
+  Loader2, 
+  Layers, 
+  Globe, 
+  Navigation,
+  Map as MapIcon,
+  ExternalLink
 } from 'lucide-react';
 
 interface MapLocationPickerProps {
@@ -29,6 +36,8 @@ interface MapLocationPickerProps {
   title?: string;
   defaultType?: 'pickup' | 'destination';
 }
+
+type MapTileStyle = 'google_streets' | 'google_satellite' | 'osm';
 
 export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
   isOpen,
@@ -42,31 +51,38 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searching, setSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<{ display_name: string; lat: string; lon: string; isLocal?: boolean }[]>([]);
+  const [searchResults, setSearchResults] = useState<{ display_name: string; lat: string; lon: string; isLocal?: boolean; poiItem?: POILocation }[]>([]);
   const [activeCategory, setActiveCategory] = useState<'all' | POICategory>('all');
-  
+  const [activeRegion, setActiveRegion] = useState<EgyptRegion>('all');
+  const [mapStyle, setMapStyle] = useState<MapTileStyle>('google_streets');
+
   const [currentName, setCurrentName] = useState(initialLocation?.name || '');
   const [currentAddress, setCurrentAddress] = useState(initialLocation?.address || '');
   const [coords, setCoords] = useState<{ lat: number; lng: number }>(() => {
     if (initialLocation?.latitude && initialLocation?.longitude) {
       return { lat: initialLocation.latitude, lng: initialLocation.longitude };
     }
+    // Default to Egypt center or Hurghada
     return defaultType === 'pickup' 
-      ? { lat: 27.1783, lng: 33.7994 } // Hurghada Airport Terminal 1
-      : { lat: 27.3976, lng: 33.6775 }; // El Gouna
+      ? { lat: 27.1783, lng: 33.7994 } // Hurghada Airport T1
+      : { lat: 30.0444, lng: 31.2357 }; // Cairo Downtown
   });
 
   const [selectedPoi, setSelectedPoi] = useState<POILocation | null>(null);
+  const [mapReady, setMapReady] = useState(false);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const primaryMarkerRef = useRef<L.Marker | null>(null);
   const poiLayerGroupRef = useRef<L.LayerGroup | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const renderPoisRef = useRef<() => void>(() => {});
 
   // Helper to get localized name
   const getPoiName = useCallback((poi: POILocation) => {
     if (language === 'de' && poi.nameDe) return poi.nameDe;
     if (language === 'ar' && poi.nameAr) return poi.nameAr;
+    if (language === 'ru' && poi.nameRu) return poi.nameRu;
     return poi.name;
   }, [language]);
 
@@ -160,14 +176,18 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
     const poiGroup = poiLayerGroupRef.current;
     poiGroup.clearLayers();
 
-    // Filter POIs by category and zoom
+    // Filter POIs by category, region, and zoom
     const filteredPois = POI_LOCATIONS.filter((poi) => {
       // Category filter
       if (activeCategory !== 'all' && poi.category !== activeCategory) {
         return false;
       }
-      // Dynamic zoom threshold (show all when matching a specific category filter, or if currentZoom >= minZoom)
-      if (activeCategory !== 'all') {
+      // Region filter
+      if (activeRegion !== 'all' && poi.region && poi.region !== activeRegion && poi.region !== 'all') {
+        return false;
+      }
+      // Zoom threshold (show all when a specific category or region filter is selected, or if currentZoom >= minZoom)
+      if (activeCategory !== 'all' || activeRegion !== 'all') {
         return true;
       }
       return currentZoom >= poi.minZoom;
@@ -224,7 +244,6 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
         </button>
       `;
 
-      // Attach button click event
       marker.bindPopup(popupContent, { maxWidth: 280, className: 'pegasus-leaflet-popup' });
 
       marker.on('popupopen', () => {
@@ -239,7 +258,11 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
 
       marker.addTo(poiGroup);
     });
-  }, [activeCategory, getPoiName]);
+  }, [activeCategory, activeRegion, getPoiName, t]);
+
+  useEffect(() => {
+    renderPoisRef.current = renderPoisOnMap;
+  }, [renderPoisOnMap]);
 
   // Select POI programmatically
   const selectPoi = (poi: POILocation) => {
@@ -255,12 +278,12 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
     }
   };
 
-  // Reverse geocoding helper via Nominatim
+  // Reverse geocoding helper via Nominatim (Egypt)
   const reverseGeocode = async (lat: number, lng: number) => {
     try {
       const res = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16&addressdetails=1`,
-        { headers: { 'Accept-Language': 'en' } }
+        { headers: { 'Accept-Language': language === 'ar' ? 'ar' : language === 'ru' ? 'ru' : language === 'de' ? 'de' : 'en' } }
       );
       if (res.ok) {
         const data = await res.json();
@@ -275,7 +298,7 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
     }
   };
 
-  // Search places (local POIs + Nominatim)
+  // Search places anywhere in Egypt (local curated POIs + Nominatim)
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
@@ -285,10 +308,11 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
 
     const queryLower = searchQuery.trim().toLowerCase();
 
-    // 1. Search local curated POIs first (instant match)
+    // 1. Search local curated Egypt POIs first (instant match)
     const localMatches = POI_LOCATIONS.filter((poi) =>
       poi.name.toLowerCase().includes(queryLower) ||
       poi.nameDe.toLowerCase().includes(queryLower) ||
+      (poi.nameRu || '').toLowerCase().includes(queryLower) ||
       poi.nameAr.includes(queryLower) ||
       poi.address.toLowerCase().includes(queryLower)
     ).map((poi) => ({
@@ -306,12 +330,12 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
       return;
     }
 
-    // 2. Fall back to Nominatim search
+    // 2. Search all of Egypt via Nominatim
     try {
       const q = encodeURIComponent(`${searchQuery.trim()}, Egypt`);
       const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${q}&countrycodes=eg&limit=6`,
-        { headers: { 'Accept-Language': 'en' } }
+        `https://nominatim.openstreetmap.org/search?format=json&q=${q}&countrycodes=eg&limit=8`,
+        { headers: { 'Accept-Language': language === 'ar' ? 'ar' : language === 'ru' ? 'ru' : language === 'de' ? 'de' : 'en' } }
       );
       if (res.ok) {
         const data = await res.json();
@@ -339,12 +363,53 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
 
     if (item.poiItem) {
       setSelectedPoi(item.poiItem);
+    } else {
+      setSelectedPoi(null);
     }
 
     if (mapInstanceRef.current && primaryMarkerRef.current) {
       mapInstanceRef.current.flyTo([lat, lng], 15, { duration: 1.2 });
       primaryMarkerRef.current.setLatLng([lat, lng]);
     }
+  };
+
+  // Jump to a specific region in Egypt
+  const handleRegionJump = (reg: RegionInfo) => {
+    setActiveRegion(reg.id);
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.flyTo(reg.center, reg.zoom, { duration: 1.2 });
+    }
+  };
+
+  // Switch Tile Layer (Google Streets vs Google Satellite vs OSM)
+  const updateTileLayer = (style: MapTileStyle) => {
+    setMapStyle(style);
+    if (!mapInstanceRef.current) return;
+
+    if (tileLayerRef.current) {
+      mapInstanceRef.current.removeLayer(tileLayerRef.current);
+    }
+
+    let newTileLayer: L.TileLayer;
+    if (style === 'google_streets') {
+      newTileLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+        maxZoom: 20,
+        attribution: 'Map &copy; Google Maps',
+      });
+    } else if (style === 'google_satellite') {
+      newTileLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+        maxZoom: 20,
+        attribution: 'Satellite &copy; Google Maps',
+      });
+    } else {
+      newTileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors',
+      });
+    }
+
+    newTileLayer.addTo(mapInstanceRef.current);
+    tileLayerRef.current = newTileLayer;
   };
 
   // Initialize Map
@@ -363,8 +428,8 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
       const primaryPinIcon = L.divIcon({
         className: 'custom-primary-pin',
         html: `
-          <div style="position: relative; width: 40px; height: 50px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 6px 12px rgba(0,0,0,0.5));">
-            <svg width="40" height="50" viewBox="0 0 36 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <div style="position: relative; width: 42px; height: 52px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 6px 14px rgba(0,0,0,0.55));">
+            <svg width="42" height="52" viewBox="0 0 36 44" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M18 0C8.05888 0 0 8.05888 0 18C0 28.5 18 44 18 44C18 44 36 28.5 36 18C36 8.05888 27.9411 0 18 0Z" fill="#0D1B2A"/>
               <path d="M18 2C9.16344 2 2 9.16344 2 18C2 27.3 18 41.5 18 41.5C18 41.5 34 27.3 34 18C34 9.16344 26.8366 2 18 2Z" stroke="#D4AF37" stroke-width="2.5"/>
               <circle cx="18" cy="18" r="8" fill="#D4AF37"/>
@@ -372,25 +437,26 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
             </svg>
           </div>
         `,
-        iconSize: [40, 50],
-        iconAnchor: [20, 50],
-        popupAnchor: [0, -50],
+        iconSize: [42, 52],
+        iconAnchor: [21, 52],
+        popupAnchor: [0, -52],
       });
 
       const map = L.map(mapContainerRef.current, {
         center: [coords.lat, coords.lng],
-        zoom: 12,
+        zoom: initialLocation ? 14 : 11,
         zoomControl: true,
       });
 
-      // Standard OpenStreetMap tiles - 100% open, reliable, no API key required
-      const osmTileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors',
+      // Default to Google Maps Streets
+      const initialTileLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+        maxZoom: 20,
+        attribution: 'Map &copy; Google Maps',
       });
-      osmTileLayer.addTo(map);
+      initialTileLayer.addTo(map);
+      tileLayerRef.current = initialTileLayer;
 
-      // Create LayerGroup for POIs
+      // LayerGroup for POIs
       const poiGroup = L.layerGroup().addTo(map);
       poiLayerGroupRef.current = poiGroup;
 
@@ -417,13 +483,14 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
 
       // Update POIs on zoom
       map.on('zoomend', () => {
-        renderPoisOnMap();
+        renderPoisRef.current();
       });
 
       mapInstanceRef.current = map;
       primaryMarkerRef.current = marker;
+      setMapReady(true);
 
-      // Ensure map dimensions and tiles calculate cleanly as dialog opens
+      // Invalidate sizes smoothly as modal animation completes
       const t1 = setTimeout(() => map.invalidateSize(), 100);
       const t2 = setTimeout(() => map.invalidateSize(), 300);
       const t3 = setTimeout(() => map.invalidateSize(), 600);
@@ -437,6 +504,8 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
 
     return () => {
       clearTimeout(timer);
+      setMapReady(false);
+      poiLayerGroupRef.current = null;
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
@@ -444,10 +513,12 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
     };
   }, [isOpen]);
 
-  // Re-render POIs when active category changes
+  // Re-render POIs once map initializes or when filters change
   useEffect(() => {
-    renderPoisOnMap();
-  }, [activeCategory, renderPoisOnMap]);
+    if (mapReady) {
+      renderPoisOnMap();
+    }
+  }, [mapReady, activeCategory, activeRegion, renderPoisOnMap]);
 
   const handleConfirm = () => {
     const resolvedName = currentName.trim() || `Location (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`;
@@ -465,18 +536,18 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
   if (!isOpen) return null;
 
   const categoryChips: { id: 'all' | POICategory; label: string; icon: any }[] = [
-    { id: 'all', label: language === 'ar' ? 'الكل' : language === 'de' ? 'Alle Orte' : 'All Places', icon: Compass },
-    { id: 'hotels', label: language === 'ar' ? 'الفنادق والمنتجعات' : language === 'de' ? 'Hotels & Resorts' : 'Hotels & Resorts', icon: Building },
-    { id: 'attractions', label: language === 'ar' ? 'المعالم السياحية' : language === 'de' ? 'Sehenswürdigkeiten' : 'Attractions', icon: Sparkles },
-    { id: 'airports', label: language === 'ar' ? 'المطارات' : language === 'de' ? 'Flughäfen' : 'Airports', icon: Plane },
-    { id: 'marinas', label: language === 'ar' ? 'الموانئ والمارينا' : language === 'de' ? 'Marinas & Häfen' : 'Marinas', icon: Anchor },
-    { id: 'destinations', label: language === 'ar' ? 'المدن والوجهات' : language === 'de' ? 'Hauptreiseziele' : 'Destinations', icon: MapPin },
+    { id: 'all', label: language === 'ar' ? 'كافة المعالم' : language === 'de' ? 'Alle Orte' : language === 'ru' ? 'Все места' : 'All Places', icon: Compass },
+    { id: 'airports', label: language === 'ar' ? 'المطارات' : language === 'de' ? 'Flughäfen' : language === 'ru' ? 'Аэропорты' : 'Airports', icon: Plane },
+    { id: 'hotels', label: language === 'ar' ? 'الفنادق والمنتجعات' : language === 'de' ? 'Hotels & Resorts' : language === 'ru' ? 'Отели и курорты' : 'Hotels & Resorts', icon: Building },
+    { id: 'attractions', label: language === 'ar' ? 'المعالم السياحية' : language === 'de' ? 'Sehenswürdigkeiten' : language === 'ru' ? 'Достопримечательности' : 'Attractions', icon: Sparkles },
+    { id: 'destinations', label: language === 'ar' ? 'المدن والمحافظات' : language === 'de' ? 'Städte & Regionen' : language === 'ru' ? 'Города и курорты' : 'Cities & Destinations', icon: MapPin },
+    { id: 'marinas', label: language === 'ar' ? 'الموانئ والمارينا' : language === 'de' ? 'Marinas' : language === 'ru' ? 'Марины и порты' : 'Marinas', icon: Anchor },
   ];
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
       <div 
-        className="bg-white rounded-2xl shadow-2xl border border-[#D4AF37]/50 w-full max-w-5xl overflow-hidden flex flex-col max-h-[95vh]"
+        className="bg-white rounded-2xl shadow-2xl border border-[#D4AF37]/50 w-full max-w-5xl overflow-hidden flex flex-col max-h-[96vh]"
         dir={direction}
       >
         {/* Header */}
@@ -486,11 +557,24 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
               <MapPin className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold font-heading text-white">
-                {title || (defaultType === 'pickup' ? 'Select Pickup Location' : 'Select Destination')}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold font-heading text-white">
+                  {title || (defaultType === 'pickup'
+                    ? (language === 'ar' ? 'حدد مكان الانطلاق' : language === 'ru' ? 'Выберите место подачи' : language === 'de' ? 'Abholort wählen' : 'Select Pickup Location')
+                    : (language === 'ar' ? 'حدد وجهة الوصول' : language === 'ru' ? 'Выберите пункт назначения' : language === 'de' ? 'Zielort wählen' : 'Select Destination'))}
+                </h3>
+                <span className="text-[10px] bg-[#D4AF37]/20 text-[#D4AF37] px-2 py-0.5 rounded-full border border-[#D4AF37]/40 font-semibold">
+                  {language === 'ar' ? 'خريطة مصر كاملة' : language === 'ru' ? 'Карта всего Египта' : language === 'de' ? 'Ganz Ägypten Karte' : 'All Egypt Map'}
+                </span>
+              </div>
               <p className="text-[11px] text-slate-300">
-                Explore hotels, resorts, landmarks & airports on the map or click any point to drop pin
+                {language === 'ar' 
+                  ? 'اختر أي وجهة في مصر (القاهرة، الغردقة، الإسكندرية، شرم الشيخ، الأقصر، أسوان، مرسى علم) بالبحث أو تحريك العلامة'
+                  : language === 'ru'
+                  ? 'Выберите любую точку в Египте (Хургада, Каир, Луксор, Марса-Алам, Шарм-эш-Шейх) через поиск, регионы или клик по карте'
+                  : language === 'de'
+                  ? 'Wählen Sie beliebige Orte in Ägypten per Suche, Regionen oder Klick auf die Karte'
+                  : 'Select any pickup or destination across Egypt by searching, region tabs, or clicking the map'}
               </p>
             </div>
           </div>
@@ -502,57 +586,130 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
           </button>
         </div>
 
-        {/* Toolbar: Search + Category Filters */}
+        {/* Toolbar: Search + Egypt Region Quick Jumps */}
         <div className="p-3 sm:p-4 bg-[#FBF9F5] border-b border-[#EAE4D9] space-y-2.5 shrink-0">
-          {/* Search bar */}
-          <form onSubmit={handleSearch} className="flex gap-2">
-            <div className="relative flex-1">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={t('map.searchPlaceholder')}
-                className="w-full pl-9 rtl:pl-3 rtl:pr-9 pr-3 py-2 text-xs rounded-xl border border-[#D5CDBD] bg-white focus:outline-hidden focus:border-[#D4AF37] shadow-2xs"
-              />
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 rtl:left-auto rtl:right-3 top-2.5" />
+          {/* Search bar & Map Layer Toggle */}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <form onSubmit={handleSearch} className="flex gap-2 flex-1">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={language === 'ar' ? 'ابحث عن أي فندق، شارع، مطار، أو مدينة في مصر...' : language === 'ru' ? 'Поиск любого отеля, улицы, аэропорта или города в Египте...' : language === 'de' ? 'Hotel, Straße, Flughafen oder Stadt in Ägypten suchen...' : 'Search any hotel, street, airport, or city in Egypt...'}
+                  className="w-full pl-9 rtl:pl-3 rtl:pr-9 pr-3 py-2 text-xs rounded-xl border border-[#D5CDBD] bg-white focus:outline-hidden focus:border-[#D4AF37] shadow-2xs"
+                />
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 rtl:left-auto rtl:right-3 top-2.5" />
+              </div>
+              <button
+                type="submit"
+                disabled={searching}
+                className="px-4 py-2 rounded-xl bg-[#0D1B2A] text-[#D4AF37] text-xs font-bold hover:brightness-110 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0"
+              >
+                {searching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                <span>{language === 'ar' ? 'بحث' : language === 'ru' ? 'Найти' : language === 'de' ? 'Suchen' : 'Search'}</span>
+              </button>
+            </form>
+
+            {/* Map Tile Switcher (Google Streets / Satellite / OpenStreetMap) */}
+            <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-[#D5CDBD] shrink-0 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => updateTileLayer('google_streets')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer flex items-center gap-1 ${
+                  mapStyle === 'google_streets'
+                    ? 'bg-[#0D1B2A] text-[#D4AF37] shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+                title="Google Maps Standard Streets"
+              >
+                <MapIcon className="w-3 h-3 text-[#D4AF37]" />
+                <span>{language === 'ar' ? 'شوارع جوجل' : language === 'ru' ? 'Карта улиц' : language === 'de' ? 'Straßenkarte' : 'Google Streets'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => updateTileLayer('google_satellite')}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer flex items-center gap-1 ${
+                  mapStyle === 'google_satellite'
+                    ? 'bg-[#0D1B2A] text-[#D4AF37] shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+                title="Google Maps Satellite Hybrid"
+              >
+                <Globe className="w-3 h-3 text-[#D4AF37]" />
+                <span>{language === 'ar' ? 'قمر صناعي' : language === 'ru' ? 'Спутник' : language === 'de' ? 'Satellit' : 'Satellite'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => updateTileLayer('osm')}
+                className={`px-2 py-1 rounded-lg text-[11px] font-semibold transition cursor-pointer flex items-center gap-1 ${
+                  mapStyle === 'osm'
+                    ? 'bg-[#0D1B2A] text-[#D4AF37] shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+                title="OpenStreetMap Standard"
+              >
+                <Layers className="w-3 h-3 text-slate-400" />
+                <span>OSM</span>
+              </button>
             </div>
-            <button
-              type="submit"
-              disabled={searching}
-              className="px-4 py-2 rounded-xl bg-[#0D1B2A] text-[#D4AF37] text-xs font-bold hover:brightness-110 transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-            >
-              {searching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-              <span>Search</span>
-            </button>
-          </form>
+          </div>
 
           {/* Autocomplete dropdown if results returned */}
           {searchResults.length > 0 && (
-            <div className="bg-white rounded-xl border border-[#D4AF37] shadow-lg p-2 max-h-44 overflow-y-auto space-y-1">
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider px-2">
-                Matching Places:
+            <div className="bg-white rounded-xl border-2 border-[#D4AF37] shadow-lg p-2 max-h-48 overflow-y-auto space-y-1 z-30">
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider px-2">
+                {language === 'ar' ? 'النتائج المطابقة في مصر:' : language === 'ru' ? 'Совпадения в Египте:' : language === 'de' ? 'Treffer in Ägypten:' : 'Matching Egypt Places:'}
               </span>
               {searchResults.map((res, i) => (
                 <button
                   key={i}
                   type="button"
                   onClick={() => selectSearchResult(res)}
-                  className="w-full text-left rtl:text-right px-3 py-2 rounded-lg text-xs hover:bg-[#F8F5EE] text-slate-800 flex items-start justify-between gap-2 transition"
+                  className="w-full text-left rtl:text-right px-3 py-2 rounded-lg text-xs hover:bg-[#F8F5EE] text-slate-800 flex items-start justify-between gap-2 transition cursor-pointer"
                 >
                   <div className="flex items-start gap-2">
                     <MapPin className="w-3.5 h-3.5 text-[#D4AF37] shrink-0 mt-0.5" />
                     <span className="font-medium text-slate-900 line-clamp-1">{res.display_name}</span>
                   </div>
-                  <span className="text-[10px] text-[#D4AF37] font-semibold shrink-0">View on Map</span>
+                  <span className="text-[10px] text-[#D4AF37] font-semibold shrink-0">
+                    {language === 'ar' ? 'عرض بالخريطة' : language === 'ru' ? 'На карте' : language === 'de' ? 'Auf Karte zeigen' : 'View on Map'}
+                  </span>
                 </button>
               ))}
             </div>
           )}
 
+          {/* Egypt Regions Quick-Jump Tabs */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar border-t border-[#EAE4D9]/60 pt-2">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider shrink-0 mr-1 rtl:mr-0 rtl:ml-1">
+              {language === 'ar' ? 'المنطقة:' : language === 'ru' ? 'Регион:' : language === 'de' ? 'Region:' : 'Region:'}
+            </span>
+            {EGYPT_REGIONS.map((reg) => {
+              const isSelected = activeRegion === reg.id;
+              const regLabel = language === 'ar' ? reg.nameAr : language === 'de' ? reg.nameDe : language === 'ru' ? reg.nameRu : reg.name;
+              return (
+                <button
+                  key={reg.id}
+                  type="button"
+                  onClick={() => handleRegionJump(reg)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition flex items-center gap-1 cursor-pointer shrink-0 ${
+                    isSelected
+                      ? 'bg-[#0D1B2A] text-[#D4AF37] border border-[#D4AF37] shadow-2xs'
+                      : 'bg-white border border-[#EAE4D9] text-slate-700 hover:border-[#D4AF37] hover:bg-slate-50'
+                  }`}
+                >
+                  <Navigation className={`w-3 h-3 ${isSelected ? 'text-[#D4AF37]' : 'text-slate-400'}`} />
+                  <span>{regLabel}</span>
+                </button>
+              );
+            })}
+          </div>
+
           {/* POI Category Filter Chips */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider shrink-0 mr-1 rtl:mr-0 rtl:ml-1 hidden sm:inline">
-              Filter Map:
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider shrink-0 mr-1 rtl:mr-0 rtl:ml-1 hidden sm:inline">
+              {language === 'ar' ? 'تصفية:' : language === 'ru' ? 'Категория:' : language === 'de' ? 'Kategorie:' : 'Category:'}
             </span>
             {categoryChips.map((chip) => {
               const IconComp = chip.icon;
@@ -562,13 +719,13 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
                   key={chip.id}
                   type="button"
                   onClick={() => setActiveCategory(chip.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap transition flex items-center gap-1 cursor-pointer shrink-0 ${
                     isActive
-                      ? 'bg-[#0D1B2A] text-[#D4AF37] shadow-xs border border-[#D4AF37]'
-                      : 'bg-white border border-[#EAE4D9] text-slate-700 hover:border-slate-400 hover:bg-slate-50'
+                      ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                      : 'bg-white/80 border border-[#EAE4D9] text-slate-600 hover:border-slate-400 hover:bg-white'
                   }`}
                 >
-                  <IconComp className={`w-3.5 h-3.5 ${isActive ? 'text-[#D4AF37]' : 'text-slate-500'}`} />
+                  <IconComp className={`w-3 h-3 ${isActive ? 'text-amber-800' : 'text-slate-400'}`} />
                   <span>{chip.label}</span>
                 </button>
               );
@@ -584,14 +741,14 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
           <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 pointer-events-none w-11/12 max-w-md text-center">
             <span className="px-3.5 py-1.5 rounded-full bg-[#0D1B2A]/90 text-white text-[11px] font-medium shadow-lg border border-[#D4AF37]/50 backdrop-blur-xs inline-flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />
-              Click any place pin on map or drag the golden marker
+              {language === 'ar' ? 'انقر على أي مكان في مصر أو حرّك الدبوس الذهبي' : language === 'ru' ? 'Нажмите в любую точку Египта или перетащите золотую метку' : language === 'de' ? 'Klicken Sie auf die Karte oder verschieben Sie den Marker' : 'Click anywhere across Egypt or drag the golden pin'}
             </span>
           </div>
 
-          {/* Quick POI count pill */}
+          {/* Quick Egypt POI counter badge */}
           <div className="absolute bottom-3 left-3 z-20 pointer-events-none">
-            <span className="px-2.5 py-1 rounded-md bg-white/90 text-slate-800 text-[10px] font-semibold shadow-xs border border-[#EAE4D9]">
-              {POI_LOCATIONS.length} Verified Red Sea & Egypt POIs Loaded
+            <span className="px-2.5 py-1 rounded-md bg-white/95 text-slate-800 text-[10px] font-semibold shadow-xs border border-[#EAE4D9]">
+              {language === 'ar' ? 'تغطية خرائط كاملة لكافة المحافظات المصرية' : language === 'ru' ? 'Полное покрытие карт всех провинций Египта' : language === 'de' ? 'Vollständige Kartenabdeckung für ganz Ägypten' : 'Full map coverage across all Egyptian governorates'}
             </span>
           </div>
         </div>
@@ -605,19 +762,28 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
                 type="text"
                 value={currentName}
                 onChange={(e) => setCurrentName(e.target.value)}
-                placeholder="Selected Location Name..."
+                placeholder={language === 'ar' ? 'اسم المكان المختار...' : language === 'ru' ? 'Название выбранной точки...' : language === 'de' ? 'Ausgewählter Ortsname...' : 'Selected Location Name...'}
                 className="font-bold text-sm text-[#0D1B2A] border-b border-dashed border-[#D4AF37] focus:outline-hidden bg-transparent w-full"
               />
             </div>
 
             <div className="text-slate-500 text-[11px] truncate mt-1" title={currentAddress}>
-              {currentAddress || 'Coordinates selected'}
+              {currentAddress || (language === 'ar' ? 'تم اختيار الإحداثيات على الخريطة' : language === 'ru' ? 'Координаты выбраны на карте' : language === 'de' ? 'Koordinaten auf der Karte gewählt' : 'Coordinates selected on map')}
             </div>
 
-            <div className="flex items-center gap-3 text-[10px] text-slate-400 mt-1 font-mono">
+            <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-400 mt-1 font-mono">
               <span>Lat: {coords.lat.toFixed(5)}</span>
               <span>•</span>
               <span>Lng: {coords.lng.toFixed(5)}</span>
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${coords.lat},${coords.lng}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 font-sans font-semibold text-[#D4AF37] hover:underline"
+              >
+                <ExternalLink className="w-3 h-3" />
+                <span>{t('booking.openInMaps')}</span>
+              </a>
               {selectedPoi && (
                 <span className="bg-amber-50 text-amber-900 border border-amber-200 px-1.5 py-0.2 rounded font-sans font-semibold">
                   {selectedPoi.badge}
@@ -632,7 +798,7 @@ export const MapLocationPicker: React.FC<MapLocationPickerProps> = ({
               onClick={onClose}
               className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition cursor-pointer"
             >
-              Cancel
+              {language === 'ar' ? 'إلغاء' : language === 'ru' ? 'Отмена' : language === 'de' ? 'Abbrechen' : 'Cancel'}
             </button>
             <button
               type="button"

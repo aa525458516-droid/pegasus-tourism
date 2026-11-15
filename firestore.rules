@@ -24,11 +24,17 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Hardened admin check:
+    // Requires authenticated user with email_verified == true
+    // Matches primary bootstrap owner email, or an email in /adminEmails, or UID in /admins
     function isAdmin() {
-      return isSignedIn() && (
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        (request.auth.token.email != null && request.auth.token.email.lower() == 'aa525458516@gmail.com')
-      );
+      return isSignedIn() 
+        && request.auth.token.email_verified == true
+        && (
+          (request.auth.token.email != null && request.auth.token.email.lower() == 'aa525458516@gmail.com')
+          || (request.auth.token.email != null && exists(/databases/$(database)/documents/adminEmails/$(request.auth.token.email.lower())))
+          || exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        );
     }
 
     function isValidBookingCreate(data) {
@@ -38,17 +44,55 @@ service cloud.firestore {
         && data.customerName is string && data.customerName.size() > 1 && data.customerName.size() <= 100
         && data.phone is string && data.phone.size() >= 5 && data.phone.size() <= 50
         && data.email is string && data.email.size() >= 5 && data.email.size() <= 100
-        && data.passengerCount is int && data.passengerCount > 0 && data.passengerCount <= 100
+        && data.passengerCount is int && data.passengerCount >= 1
+        && (!('vehicleType' in data) || (data.vehicleType is string && data.vehicleType.size() <= 60))
+        && (('vehicleType' in data && data.vehicleType == 'toyota_hiace' && data.passengerCount <= 8) || data.passengerCount <= 4)
         && data.pickupDate is string && data.pickupDate.size() <= 30
         && data.destination is string && data.destination.size() <= 200;
     }
 
     function isValidPublicStatusCreate(data) {
-      return data.keys().hasAll(['bookingReference', 'status', 'pickupDate', 'destination'])
+      return data.keys().hasAll(['bookingReference', 'status', 'pickupDate', 'destination', 'verifyEmailHash', 'verifyPhoneHash'])
         && data.status == 'Pending'
         && data.bookingReference is string && data.bookingReference.size() <= 40
+        && data.verifyEmailHash is string && data.verifyEmailHash.size() == 64 && data.verifyEmailHash.matches('^[a-f0-9]{64}$')
+        && data.verifyPhoneHash is string && data.verifyPhoneHash.size() == 64 && data.verifyPhoneHash.matches('^[a-f0-9]{64}$')
+        && (!('customerName' in data))
         && (!('phone' in data))
-        && (!('email' in data));
+        && (!('email' in data))
+        && (!('emailHash' in data))
+        && (!('phoneHash' in data))
+        && (!('adminNotes' in data));
+    }
+
+    function isValidCustomTripCreate(data) {
+      return data.keys().hasAll(['referenceNumber', 'customerName', 'phone', 'email', 'passengerCount', 'startDate', 'status'])
+        && data.status == 'Pending Review'
+        && data.referenceNumber is string && data.referenceNumber.size() <= 40
+        && data.customerName is string && data.customerName.size() > 1 && data.customerName.size() <= 100
+        && data.phone is string && data.phone.size() >= 5 && data.phone.size() <= 50
+        && data.email is string && data.email.size() >= 5 && data.email.size() <= 100
+        && data.passengerCount is int && data.passengerCount >= 1 && data.passengerCount <= 4
+        && (!('pricing' in data) || (!('internalCost' in data.pricing) && !('margin' in data.pricing)));
+    }
+
+    function isValidCustomTripStatusCreate(data) {
+      return data.keys().hasAll(['referenceNumber', 'maskedCustomerName', 'startDate', 'passengerCount', 'pickup', 'accommodation', 'status', 'verifyEmailHash', 'verifyPhoneHash'])
+        && data.status == 'Pending Review'
+        && data.referenceNumber is string && data.referenceNumber.size() <= 40
+        && data.maskedCustomerName is string && data.maskedCustomerName.size() >= 1 && data.maskedCustomerName.size() <= 100
+        && data.passengerCount is int && data.passengerCount >= 1 && data.passengerCount <= 4
+        && data.verifyEmailHash is string && data.verifyEmailHash.size() == 64 && data.verifyEmailHash.matches('^[a-f0-9]{64}$')
+        && data.verifyPhoneHash is string && data.verifyPhoneHash.size() == 64 && data.verifyPhoneHash.matches('^[a-f0-9]{64}$')
+        && (!('customerName' in data))
+        && (!('phone' in data))
+        && (!('email' in data))
+        && (!('country' in data))
+        && (!('specialRequests' in data))
+        && (!('emailHash' in data))
+        && (!('phoneHash' in data))
+        && (!('adminNotes' in data))
+        && (!('pricing' in data) || (!('internalCost' in data.pricing) && !('margin' in data.pricing)));
     }
 
     function isValidMessageCreate(data) {
@@ -59,16 +103,18 @@ service cloud.firestore {
         && data.message is string && data.message.size() > 1 && data.message.size() <= 2000;
     }
 
-    // Admins collection
+    // Admins collections: strictly accessible by verified administrators only
     match /admins/{adminUid} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow read, write: if isValidId(adminUid) && isAdmin();
     }
 
-    // Bookings collection: Confidential master records with full PII.
-    // Public users CANNOT read or list documents in this collection.
-    // Public users can only create with status 'Pending'.
-    // Only verified administrators can read (get/list), modify status, or delete.
+    match /adminEmails/{emailKey} {
+      allow read, write: if isAdmin();
+    }
+
+    // Confidential Master Bookings
+    // Public CANNOT read or list documents.
+    // Only verified administrators have access.
     match /bookings/{bookingId} {
       allow get: if isValidId(bookingId) && isAdmin();
       allow list: if isAdmin();
@@ -77,10 +123,10 @@ service cloud.firestore {
       allow delete: if isValidId(bookingId) && isAdmin();
     }
 
-    // Public Sanitized Booking Status:
-    // Individual customers can ONLY get their own single status by document ID (= bookingReference).
-    // Listing/scraping is strictly forbidden for non-admins.
-    // Document contains NO customer phone or email, and masked name.
+    // Sanitized Public Booking Status Card
+    // Individual customers can ONLY get their own document by ID (= unguessable bookingReference)
+    // and client UI enforces matching salted SHA-256 email/phone verification.
+    // Listing/scraping is blocked for non-admins.
     match /bookingStatus/{refId} {
       allow get: if isValidId(refId);
       allow list: if isAdmin();
@@ -89,40 +135,60 @@ service cloud.firestore {
       allow delete: if isValidId(refId) && isAdmin();
     }
 
-    // Tours catalog
+    // Confidential Custom Trip Requests (Admin only for reads)
+    // Public CANNOT read or list documents containing customer PII.
+    match /customTripRequests/{requestId} {
+      allow get: if isValidId(requestId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(requestId) && isValidCustomTripCreate(incoming());
+      allow update: if isValidId(requestId) && (
+        isAdmin() ||
+        (resource.data.status == 'Price Sent' && incoming().status == 'Customer Approved' && incoming().diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']))
+      );
+      allow delete: if isValidId(requestId) && isAdmin();
+    }
+
+    // Sanitized Public Custom Trip Status Card
+    // Zero PII (maskedCustomerName only), verified on lookup via salted SHA-256 hashes.
+    match /customTripStatus/{refId} {
+      allow get: if isValidId(refId);
+      allow list: if isAdmin();
+      allow create: if isValidId(refId) && isValidCustomTripStatusCreate(incoming());
+      allow update: if isValidId(refId) && (
+        isAdmin() ||
+        (resource.data.status == 'Price Sent' && incoming().status == 'Customer Approved' && incoming().diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']))
+      );
+      allow delete: if isValidId(refId) && isAdmin();
+    }
+
+    // Admin-Only Pricing for Custom Trips
+    // Strictly forbidden for public access.
+    match /customTripAdminPricing/{refId} {
+      allow read, write: if isValidId(refId) && isAdmin();
+    }
+
+    // Tours Catalog
     match /tours/{tourId} {
       allow get, list: if true;
       allow create, update, delete: if isValidId(tourId) && isAdmin();
     }
 
-    // Contact messages & inquiries
+    // Tourist Destinations & Landmarks
+    match /destinations/{destId} {
+      allow get, list: if true;
+      allow create, update, delete: if isValidId(destId) && isAdmin();
+    }
+
+    // Contact Messages
     match /contactMessages/{messageId} {
       allow create: if isValidId(messageId) && isValidMessageCreate(incoming());
       allow get, list, update, delete: if isValidId(messageId) && isAdmin();
     }
 
-    // Company Settings
+    // Company Settings & Policies
     match /settings/{settingId} {
       allow read: if true;
       allow write: if isValidId(settingId) && isAdmin();
-    }
-
-    // Custom Trip Requests
-    match /customTripRequests/{requestId} {
-      allow get: if isValidId(requestId);
-      allow list: if isAdmin();
-      allow create: if isValidId(requestId) 
-        && incoming().status == 'Pending Review'
-        && incoming().referenceNumber is string && incoming().referenceNumber.size() <= 40
-        && incoming().customerName is string && incoming().customerName.size() > 1 && incoming().customerName.size() <= 100
-        && incoming().phone is string && incoming().phone.size() >= 5 && incoming().phone.size() <= 50
-        && incoming().email is string && incoming().email.size() >= 5 && incoming().email.size() <= 100
-        && incoming().passengerCount is int && incoming().passengerCount > 0 && incoming().passengerCount <= 2;
-      allow update: if isValidId(requestId) && (
-        isAdmin() || 
-        (resource.data.status == 'Price Sent' && incoming().status == 'Customer Approved' && incoming().diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']))
-      );
-      allow delete: if isValidId(requestId) && isAdmin();
     }
   }
 }

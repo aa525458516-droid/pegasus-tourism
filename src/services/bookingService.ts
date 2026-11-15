@@ -12,14 +12,27 @@ import {
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { Booking, BookingPublicStatus, BookingStatus } from '../types';
+import { sendServerWhatsAppBookingNotification } from './notificationService';
+import { computeVerifyEmailHash, computeVerifyPhoneHash } from '../utils/trackingVerification';
 
 const COLLECTION_NAME = 'bookings';
 const STATUS_COLLECTION = 'bookingStatus';
 
+/**
+ * Generates an unguessable, cryptographically secure booking reference.
+ * 8 alphanumeric chars from base32 without confusing characters (no 0, O, 1, I, L).
+ * Total ~656 billion combinations per year, impossible to guess.
+ */
 export function generateBookingReference(): string {
   const year = new Date().getFullYear();
-  const randomChars = Math.random().toString(36).substring(2, 7).toUpperCase();
-  return `PEG-${year}-${randomChars}`;
+  const alphabet = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+  const array = new Uint8Array(8);
+  crypto.getRandomValues(array);
+  let randomPart = '';
+  for (let i = 0; i < array.length; i++) {
+    randomPart += alphabet[array[i] % alphabet.length];
+  }
+  return `PEG-${year}-${randomPart}`;
 }
 
 export function maskName(name: string): string {
@@ -33,29 +46,6 @@ export function maskName(name: string): string {
     .join(' ');
 }
 
-export async function hashIdentifier(input: string): Promise<string> {
-  const normalized = input.trim().toLowerCase();
-  if (typeof globalThis !== 'undefined' && globalThis.crypto?.subtle) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(normalized);
-    const hashBuf = await globalThis.crypto.subtle.digest('SHA-256', data);
-    return Array.from(new Uint8Array(hashBuf))
-      .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
-  }
-  let hash = 0;
-  for (let i = 0; i < normalized.length; i++) {
-    hash = (hash << 5) - hash + normalized.charCodeAt(i);
-    hash |= 0;
-  }
-  return 'h_' + Math.abs(hash).toString(16);
-}
-
-export async function hashPhone(input: string): Promise<string> {
-  const digitsOnly = input.replace(/\D/g, '');
-  return hashIdentifier(digitsOnly);
-}
-
 export async function createBooking(
   bookingData: Omit<Booking, 'id' | 'status' | 'bookingReference' | 'createdAt' | 'updatedAt'>
 ): Promise<Booking> {
@@ -63,11 +53,12 @@ export async function createBooking(
   const docRef = doc(collection(db, COLLECTION_NAME));
   const now = new Date().toISOString();
 
-  // Enforce integer types for passenger & luggage counts
-  const passengerCountInt = Math.max(1, Math.round(Number(bookingData.passengerCount) || 1));
+  // Enforce passenger limit: up to 8 for Toyota Hiace only, 4 max for all other vehicles
+  const maxAllowedPassengers = bookingData.vehicleType === 'toyota_hiace' ? 8 : 4;
+  const passengerCountInt = Math.min(maxAllowedPassengers, Math.max(1, Math.round(Number(bookingData.passengerCount) || 1)));
   const luggageCountInt = Math.max(0, Math.round(Number(bookingData.luggageCount) || 0));
 
-  // Build sanitized master record omitting any undefined properties
+  // Confidential master record (Admin only)
   const cleanBooking: Record<string, any> = {
     id: docRef.id,
     bookingReference,
@@ -82,14 +73,26 @@ export async function createBooking(
     serviceType: bookingData.serviceType || 'airport_pickup',
     origin: bookingData.origin.trim(),
     destination: bookingData.destination.trim(),
-    vehicleType: bookingData.vehicleType || 'luxury_sedan',
-    status: 'Pending', // Enforced default: every new booking has Pending status
-    adminNotes: bookingData.adminNotes?.trim() || '',
+    vehicleType: bookingData.vehicleType || 'toyota_corolla',
+    status: 'Pending',
+    adminNotes: bookingData.adminNotes?.trim() || '', // Admin internal notes ONLY
+    customerMessage: '',                             // Public message to customer
     createdAt: now,
     updatedAt: now,
   };
 
-  // Only attach optional fields if they have non-empty string values
+  if (bookingData.vehicleName && bookingData.vehicleName.trim()) {
+    cleanBooking.vehicleName = bookingData.vehicleName.trim();
+  }
+  if (typeof bookingData.quotedPrice === 'number' && Number.isFinite(bookingData.quotedPrice) && bookingData.quotedPrice > 0) {
+    cleanBooking.quotedPrice = bookingData.quotedPrice;
+  }
+  if (bookingData.priceCurrency && bookingData.priceCurrency.trim()) {
+    cleanBooking.priceCurrency = bookingData.priceCurrency.trim();
+  }
+  if (bookingData.priceStatus) {
+    cleanBooking.priceStatus = bookingData.priceStatus;
+  }
   if (bookingData.tripType) {
     cleanBooking.tripType = bookingData.tripType;
   }
@@ -131,11 +134,12 @@ export async function createBooking(
     cleanBooking.tourTitle = bookingData.tourTitle.trim();
   }
 
-  // Generate SHA-256 hashes for customer self-verification (NEVER storing raw email or phone in public collection)
-  const emailHash = await hashIdentifier(bookingData.email);
-  const phoneHash = await hashPhone(bookingData.phone);
+  const [verifyEmailHash, verifyPhoneHash] = await Promise.all([
+    computeVerifyEmailHash(bookingReference, bookingData.email),
+    computeVerifyPhoneHash(bookingReference, bookingData.phone),
+  ]);
 
-  // Sanitized public status record without phone, email, or private notes
+  // Sanitized public status record (Zero PII, verified with salted hashes, NO admin notes)
   const publicStatusDoc: BookingPublicStatus = {
     bookingReference,
     status: 'Pending',
@@ -144,15 +148,28 @@ export async function createBooking(
     pickupTime: bookingData.pickupTime || '12:00',
     origin: bookingData.origin.trim(),
     destination: bookingData.destination.trim(),
-    vehicleType: bookingData.vehicleType || 'luxury_sedan',
+    vehicleType: bookingData.vehicleType || 'toyota_corolla',
     serviceType: bookingData.serviceType || 'airport_pickup',
     passengerCount: passengerCountInt,
-    emailHash,
-    phoneHash,
-    adminNotes: '',
+    customerMessage: '',
+    verifyEmailHash,
+    verifyPhoneHash,
     updatedAt: now,
+    createdAt: now,
   };
 
+  if (cleanBooking.vehicleName) {
+    publicStatusDoc.vehicleName = cleanBooking.vehicleName;
+  }
+  if (cleanBooking.quotedPrice !== undefined) {
+    publicStatusDoc.quotedPrice = cleanBooking.quotedPrice;
+  }
+  if (cleanBooking.priceCurrency) {
+    publicStatusDoc.priceCurrency = cleanBooking.priceCurrency;
+  }
+  if (cleanBooking.priceStatus) {
+    publicStatusDoc.priceStatus = cleanBooking.priceStatus;
+  }
   if (cleanBooking.tripType) {
     publicStatusDoc.tripType = cleanBooking.tripType;
   }
@@ -166,82 +183,63 @@ export async function createBooking(
     publicStatusDoc.tourTitle = cleanBooking.tourTitle;
   }
 
-  // Atomically commit both confidential master record and sanitized public status card
   try {
-    const { writeBatch } = await import('firebase/firestore');
-    const batch = writeBatch(db);
-    const statusRef = doc(db, STATUS_COLLECTION, bookingReference);
+    // 1. Create confidential master record
+    await setDoc(docRef, cleanBooking);
 
-    batch.set(docRef, cleanBooking);
-    batch.set(statusRef, publicStatusDoc);
+    // 2. Create sanitized public tracking card (keyed by unguessable bookingReference)
+    const statusDocRef = doc(db, STATUS_COLLECTION, bookingReference);
+    await setDoc(statusDocRef, publicStatusDoc);
 
-    await batch.commit();
+    // 3. Fire-and-forget server-side WhatsApp notification (never blocks customer booking)
+    void sendServerWhatsAppBookingNotification(cleanBooking as Booking);
+
     return cleanBooking as Booking;
   } catch (error) {
-    handleFirestoreError(error, OperationType.CREATE, COLLECTION_NAME);
+    handleFirestoreError(error, OperationType.WRITE, COLLECTION_NAME);
+    throw error;
   }
 }
 
-export async function getBookingByReference(reference: string): Promise<BookingPublicStatus | null> {
-  const cleanRef = reference.trim().toUpperCase();
+export async function getBookingStatusByReference(bookingReference: string): Promise<BookingPublicStatus | null> {
+  const cleanRef = bookingReference.trim().toUpperCase();
   if (!cleanRef) return null;
 
   try {
-    const statusDocRef = doc(db, STATUS_COLLECTION, cleanRef);
-    const snap = await getDoc(statusDocRef);
+    const snap = await getDoc(doc(db, STATUS_COLLECTION, cleanRef));
     if (snap.exists()) {
       return snap.data() as BookingPublicStatus;
     }
     return null;
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, `${STATUS_COLLECTION}/${cleanRef}`);
+    return null;
   }
 }
 
-export interface VerificationResult {
-  success: boolean;
-  booking?: BookingPublicStatus;
-  error?: 'empty' | 'notFound' | 'verificationFailed' | 'networkError';
+export function subscribeToBookings(callback: (bookings: Booking[]) => void): () => void {
+  const q = query(collection(db, COLLECTION_NAME), orderBy('createdAt', 'desc'));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const bookings = snapshot.docs.map((d) => ({ ...d.data(), id: d.id } as Booking));
+      callback(bookings);
+    },
+    (error) => {
+      handleFirestoreError(error, OperationType.GET, COLLECTION_NAME);
+      callback([]);
+    }
+  );
 }
 
-export async function verifyAndGetBooking(
-  reference: string,
-  emailOrPhone: string
-): Promise<VerificationResult> {
-  const cleanRef = reference.trim().toUpperCase();
-  const cleanInput = emailOrPhone.trim();
-
-  if (!cleanRef || !cleanInput) {
-    return { success: false, error: 'empty' };
-  }
-
+export async function getAllBookings(): Promise<Booking[]> {
   try {
-    const statusDoc = await getBookingByReference(cleanRef);
-    if (!statusDoc) {
-      return { success: false, error: 'notFound' };
-    }
-
-    // Hash user-provided candidate email/phone using SHA-256
-    const emailCandidateHash = await hashIdentifier(cleanInput);
-    const phoneCandidateHash = await hashPhone(cleanInput);
-
-    // If document has verification hashes, verify that at least one matches
-    if (statusDoc.emailHash || statusDoc.phoneHash) {
-      const emailMatches = Boolean(statusDoc.emailHash && statusDoc.emailHash === emailCandidateHash);
-      const phoneMatches = Boolean(statusDoc.phoneHash && statusDoc.phoneHash === phoneCandidateHash);
-
-      if (emailMatches || phoneMatches) {
-        return { success: true, booking: statusDoc };
-      }
-      return { success: false, error: 'verificationFailed' };
-    }
-
-    // Fallback for legacy bookings created prior to verification hashes:
-    // If the input looks like email/phone, accept to allow continuity for pre-existing records
-    return { success: true, booking: statusDoc };
-  } catch (err) {
-    console.error('Error verifying booking reference:', err);
-    return { success: false, error: 'networkError' };
+    const q = query(collection(db, COLLECTION_NAME), orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((d) => ({ ...d.data(), id: d.id } as Booking));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, COLLECTION_NAME);
+    return [];
   }
 }
 
@@ -249,79 +247,49 @@ export async function updateBookingStatus(
   bookingId: string,
   bookingReference: string,
   status: BookingStatus,
-  adminNotes?: string
+  adminNotes?: string,
+  customerMessage?: string
 ): Promise<void> {
-  const targetId = bookingId || bookingReference;
-  if (!targetId) {
-    throw new Error('Missing booking ID or booking reference for status update');
-  }
-
   const now = new Date().toISOString();
-  const updatePayload = {
-    status,
-    adminNotes: adminNotes ?? '',
-    updatedAt: now,
-  };
-
   try {
-    const primaryDocRef = doc(db, COLLECTION_NAME, targetId);
-    let updated = false;
-
-    try {
-      await updateDoc(primaryDocRef, updatePayload);
-      updated = true;
-    } catch (err: any) {
-      // If primaryDocRef was not found and bookingReference is different from targetId, try bookingReference
-      if (bookingReference && bookingReference !== targetId) {
-        const altDocRef = doc(db, COLLECTION_NAME, bookingReference);
-        await updateDoc(altDocRef, updatePayload);
-        updated = true;
-      } else {
-        throw err;
-      }
+    // Update private master booking
+    const updateData: Record<string, any> = {
+      status,
+      updatedAt: now,
+    };
+    if (adminNotes !== undefined) {
+      updateData.adminNotes = adminNotes;
+    }
+    if (customerMessage !== undefined) {
+      updateData.customerMessage = customerMessage;
     }
 
-    // Reliably synchronize public sanitized status document
-    const statusKey = bookingReference || targetId;
-    if (statusKey) {
-      const statusRef = doc(db, STATUS_COLLECTION, statusKey);
-      await setDoc(statusRef, {
-        status,
-        adminNotes: adminNotes ?? '',
-        updatedAt: now,
-      }, { merge: true }).catch((e) => console.warn('Syncing public status record notice:', e));
+    await updateDoc(doc(db, COLLECTION_NAME, bookingId), updateData);
+
+    // Synchronize public status card with status and customerMessage ONLY (never internal adminNotes)
+    const publicDocRef = doc(db, STATUS_COLLECTION, bookingReference);
+    const publicUpdate: Record<string, any> = {
+      status,
+      updatedAt: now,
+    };
+    if (customerMessage !== undefined) {
+      publicUpdate.customerMessage = customerMessage;
     }
+    await setDoc(publicDocRef, publicUpdate, { merge: true });
   } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, `${COLLECTION_NAME}/${targetId}`);
+    handleFirestoreError(error, OperationType.UPDATE, `${COLLECTION_NAME}/${bookingId}`);
+    throw error;
   }
 }
 
 export async function deleteBooking(bookingId: string, bookingReference?: string): Promise<void> {
-  const docRef = doc(db, COLLECTION_NAME, bookingId);
   try {
-    await deleteDoc(docRef);
+    await deleteDoc(doc(db, COLLECTION_NAME, bookingId));
     if (bookingReference) {
-      await deleteDoc(doc(db, STATUS_COLLECTION, bookingReference)).catch(() => {});
+      await deleteDoc(doc(db, STATUS_COLLECTION, bookingReference));
     }
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `${COLLECTION_NAME}/${bookingId}`);
+    throw error;
   }
-}
-
-export function subscribeToBookings(callback: (bookings: Booking[]) => void, onError?: (err: unknown) => void) {
-  const q = query(collection(db, COLLECTION_NAME), orderBy('createdAt', 'desc'));
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const items: Booking[] = [];
-      snapshot.forEach((d) => {
-        items.push({ ...(d.data() as Booking), id: d.id });
-      });
-      callback(items);
-    },
-    (err) => {
-      console.warn('Booking subscription warning/error:', err);
-      if (onError) onError(err);
-    }
-  );
 }

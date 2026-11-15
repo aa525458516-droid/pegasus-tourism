@@ -254,30 +254,31 @@ Preserve:
 
 Current business model:
 
-- PEGASUS is based in Hurghada.
+- PEGASUS is an online booking service for private transportation and tours based in Hurghada.
 - Airport transfer is the primary service.
-- Maximum passengers currently: 2.
-- No fixed luggage limit should be displayed.
-- Payment currently: cash.
-- Admin manually reviews bookings.
-- Flight ticket is required for confirmation.
-- Vehicles are rented when required.
-- PEGASUS does not currently own a fixed fleet.
+- Maximum passengers currently: 4 (Sedan: 1-2 pax, Comfort: up to 4 pax).
+- No fixed luggage limit should be displayed (free numeric input).
+- Payment currently: cash directly with driver upon arrival.
+- Admin manually reviews and quotes all bookings.
+- Flight ticket copy is required for confirmation.
+- Vehicles are rented on demand per booking.
+- PEGASUS does not own a fixed fleet (no vehicle brand claims).
+- Phone & WhatsApp: 01109790984 (international: +20 110 979 0984).
+- Contact email: aa525458516@gmail.com (editable by admin).
+- Domain: pegasus-hurghada.com is NOT owned. Do not use it anywhere.
 
 Never invent:
 
-- Prices
-- Fleet size
-- Reviews
-- Certifications
-- Awards
-- Partnerships
+- Prices or guaranteed fixed rates
+- Fleet size, ownership, or brands (Mercedes, Land Cruiser, etc.)
+- Reviews, ratings, or testimonials
+- Certifications, PADI licenses, or Ministry of Tourism licenses
+- Awards or partnerships
 - Social media accounts
-- Customer numbers
-- Photos
-- Testimonials
+- Customer statistics
+- Photos or amenities (Wi-Fi, water, leather)
 
-If business information is missing, use a placeholder or ask for the information.
+If business information is missing, make it an admin-editable setting that stays hidden until filled.
 
 ---
 

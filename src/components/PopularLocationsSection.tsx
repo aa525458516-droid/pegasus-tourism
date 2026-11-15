@@ -31,16 +31,17 @@ export const PopularLocationsSection: React.FC<PopularLocationsSectionProps> = (
   const [activeCategory, setActiveCategory] = useState<POICategory>('hotels');
 
   const categories: { id: POICategory; label: string; icon: any }[] = [
-    { id: 'hotels', label: language === 'ar' ? 'الفنادق والمنتجعات' : language === 'de' ? 'Hotels & Resorts' : 'Hotels & Resorts', icon: Building },
-    { id: 'destinations', label: language === 'ar' ? 'الوجهات والمدن' : language === 'de' ? 'Reiseziele' : 'Destinations', icon: Compass },
-    { id: 'attractions', label: language === 'ar' ? 'المعالم السياحية' : language === 'de' ? 'Sehenswürdigkeiten' : 'Attractions', icon: Sparkles },
-    { id: 'airports', label: language === 'ar' ? 'المطارات' : language === 'de' ? 'Flughäfen' : 'Airports', icon: Plane },
-    { id: 'marinas', label: language === 'ar' ? 'الموانئ والمارينا' : language === 'de' ? 'Marinas' : 'Marinas', icon: Anchor },
+    { id: 'hotels', label: language === 'ar' ? 'الفنادق والمنتجعات' : language === 'de' ? 'Hotels & Resorts' : language === 'ru' ? 'Отели и курорты' : 'Hotels & Resorts', icon: Building },
+    { id: 'destinations', label: language === 'ar' ? 'الوجهات والمدن' : language === 'de' ? 'Reiseziele' : language === 'ru' ? 'Города и курорты' : 'Destinations', icon: Compass },
+    { id: 'attractions', label: language === 'ar' ? 'المعالم السياحية' : language === 'de' ? 'Sehenswürdigkeiten' : language === 'ru' ? 'Достопримечательности' : 'Attractions', icon: Sparkles },
+    { id: 'airports', label: language === 'ar' ? 'المطارات' : language === 'de' ? 'Flughäfen' : language === 'ru' ? 'Аэропорты' : 'Airports', icon: Plane },
+    { id: 'marinas', label: language === 'ar' ? 'الموانئ والمارينا' : language === 'de' ? 'Marinas' : language === 'ru' ? 'Марины и порты' : 'Marinas', icon: Anchor },
   ];
 
   const getLocalizedName = (poi: POILocation) => {
     if (language === 'de' && poi.nameDe) return poi.nameDe;
     if (language === 'ar' && poi.nameAr) return poi.nameAr;
+    if (language === 'ru' && poi.nameRu) return poi.nameRu;
     return poi.name;
   };
 
@@ -67,13 +68,15 @@ export const PopularLocationsSection: React.FC<PopularLocationsSectionProps> = (
         <div>
           <h4 className="text-sm font-bold uppercase tracking-wider text-[#0D1B2A] flex items-center gap-2">
             <MapPin className="w-4 h-4 text-[#D4AF37]" />
-            <span>{language === 'ar' ? 'أشهر الوجهات والمعالم السياحية' : language === 'de' ? 'Beliebte Orte & Sehenswürdigkeiten' : 'Popular Locations & POIs'}</span>
+            <span>{language === 'ar' ? 'أشهر الوجهات والمعالم السياحية' : language === 'de' ? 'Beliebte Orte & Sehenswürdigkeiten' : language === 'ru' ? 'Популярные локации и отели' : 'Popular Locations & POIs'}</span>
           </h4>
           <p className="text-[11px] text-slate-500 mt-0.5">
             {language === 'ar' 
               ? 'اختر مباشرة بنقرة واحدة كمكان انطلاق أو وصول بإحداثيات مؤكدة'
               : language === 'de'
               ? 'Wählen Sie verifizierte Hotels, Resorts und Sehenswürdigkeiten mit einem Klick'
+              : language === 'ru'
+              ? 'Выберите проверенные отели, курорты, аэропорты и локации в один клик'
               : 'Select verified hotels, resorts, landmarks & airports directly as Pickup or Destination'}
           </p>
         </div>
@@ -126,7 +129,9 @@ export const PopularLocationsSection: React.FC<PopularLocationsSectionProps> = (
                   {(isSelectedPickup || isSelectedDestination) && (
                     <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded flex items-center gap-0.5">
                       <Check className="w-3 h-3" />
-                      {isSelectedPickup ? 'Pickup' : 'Dest'}
+                      {isSelectedPickup
+                        ? (language === 'ru' ? 'Подача' : language === 'ar' ? 'انطلاق' : language === 'de' ? 'Abholung' : 'Pickup')
+                        : (language === 'ru' ? 'Финиш' : language === 'ar' ? 'وصول' : language === 'de' ? 'Ziel' : 'Dest')}
                     </span>
                   )}
                 </div>
@@ -147,7 +152,7 @@ export const PopularLocationsSection: React.FC<PopularLocationsSectionProps> = (
                   className="px-2 py-1 rounded-md text-[10px] font-semibold bg-white border border-[#D5CDBD] text-slate-700 hover:border-[#D4AF37] hover:text-[#0D1B2A] transition cursor-pointer"
                   title="Set as Pickup Location"
                 >
-                  Pickup
+                  {language === 'ru' ? 'Подача' : language === 'ar' ? 'نقطة الانطلاق' : language === 'de' ? 'Abholort' : 'Pickup'}
                 </button>
                 <button
                   type="button"
@@ -155,7 +160,7 @@ export const PopularLocationsSection: React.FC<PopularLocationsSectionProps> = (
                   className="px-2 py-1 rounded-md text-[10px] font-bold bg-[#0D1B2A] text-[#D4AF37] hover:brightness-110 transition cursor-pointer"
                   title="Set as Destination Location"
                 >
-                  Destination
+                  {language === 'ru' ? 'Назначение' : language === 'ar' ? 'الوجهة' : language === 'de' ? 'Zielort' : 'Destination'}
                 </button>
               </div>
             </div>

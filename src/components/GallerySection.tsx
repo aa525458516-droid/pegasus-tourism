@@ -1,23 +1,29 @@
 import React, { useState } from 'react';
 import { useLanguage } from '../context/LanguageContext';
+import { HAS_REAL_IMAGES } from '../config/images';
 import { GALLERY_ITEMS } from '../data/initialData';
 import { Camera, X, Maximize2 } from 'lucide-react';
 
 export const GallerySection: React.FC = () => {
-  const { t, direction } = useLanguage();
+  const { t, direction, language } = useLanguage();
   const [filter, setFilter] = useState('all');
   const [activeImage, setActiveImage] = useState<string | null>(null);
 
+  // If no authentic photos are configured, hide the gallery cleanly
+  if (!HAS_REAL_IMAGES.gallery) {
+    return null;
+  }
+
   const categories = [
-    { id: 'all', label: 'All Photos' },
-    { id: 'fleet', label: 'VIP Fleet' },
-    { id: 'luxor', label: 'Luxor' },
-    { id: 'cairo', label: 'Cairo & Pyramids' },
-    { id: 'marine', label: 'Red Sea & Islands' },
-    { id: 'safari', label: 'Desert Safari' },
+    { id: 'all', label: language === 'ru' ? 'Все фото' : language === 'ar' ? 'جميع الصور' : language === 'de' ? 'Alle Fotos' : 'All Photos' },
+    { id: 'fleet', label: language === 'ru' ? 'Автомобили' : language === 'ar' ? 'السيارات' : language === 'de' ? 'Fahrzeuge' : 'Cars' },
+    { id: 'luxor', label: language === 'ru' ? 'Луксор' : language === 'ar' ? 'الأقصر' : language === 'de' ? 'Luxor' : 'Luxor' },
+    { id: 'cairo', label: language === 'ru' ? 'Каир' : language === 'ar' ? 'القاهرة' : language === 'de' ? 'Kairo' : 'Cairo' },
+    { id: 'marine', label: language === 'ru' ? 'Море и острова' : language === 'ar' ? 'البحر والجزر' : language === 'de' ? 'Meer & Inseln' : 'Sea & Islands' },
+    { id: 'safari', label: language === 'ru' ? 'Сафари в пустыне' : language === 'ar' ? 'سفاري الصحراء' : language === 'de' ? 'Wüstensafari' : 'Desert Safari' },
   ];
 
-  const filtered = GALLERY_ITEMS.filter((item) => (filter === 'all' ? true : item.category === filter));
+  const filtered = (GALLERY_ITEMS as any[]).filter((item: any) => (filter === 'all' ? true : item.category === filter));
 
   return (
     <section className="py-16 md:py-24 bg-[#FBF9F5] border-b border-[#EAE4D9]" dir={direction}>
@@ -25,7 +31,7 @@ export const GallerySection: React.FC = () => {
         <div className="text-center max-w-3xl mx-auto mb-12">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#D4AF37]/15 border border-[#D4AF37]/30 text-[#0D1B2A] text-xs font-semibold mb-3">
             <Camera className="w-3.5 h-3.5 text-[#D4AF37]" />
-            <span>Visual Showcase</span>
+            <span>{language === 'ru' ? 'Фотогалерея' : language === 'ar' ? 'معرض الصور' : language === 'de' ? 'Bildergalerie' : 'Visual Showcase'}</span>
           </div>
           <h2 className="text-3xl sm:text-4xl font-bold font-heading text-[#0D1B2A] mb-3">
             {t('gallery.title')}
@@ -35,7 +41,6 @@ export const GallerySection: React.FC = () => {
           </p>
         </div>
 
-        {/* Filter chips */}
         <div className="flex flex-wrap items-center justify-center gap-2 mb-10">
           {categories.map((c) => (
             <button
@@ -52,9 +57,8 @@ export const GallerySection: React.FC = () => {
           ))}
         </div>
 
-        {/* Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filtered.map((item) => (
+          {filtered.map((item: any) => (
             <div
               key={item.id}
               onClick={() => setActiveImage(item.imageUrl)}
@@ -84,7 +88,6 @@ export const GallerySection: React.FC = () => {
           ))}
         </div>
 
-        {/* Lightbox Modal */}
         {activeImage && (
           <div
             className="fixed inset-0 z-50 bg-black/90 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in"

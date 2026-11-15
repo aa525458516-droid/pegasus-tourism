@@ -6,8 +6,9 @@ import {
   signInWithEmailAndPassword, 
   signOut 
 } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, setDoc } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebase';
+import { verifyUserIsAdmin, BOOTSTRAP_ADMIN_EMAIL } from '../services/adminService';
 
 interface AuthContextType {
   currentUser: User | null;
@@ -18,8 +19,6 @@ interface AuthContextType {
   loginWithEmailPassword: (email: string, pass: string) => Promise<void>;
   logout: () => Promise<void>;
 }
-
-const BOOTSTRAP_ADMIN_EMAIL = 'aa525458516@gmail.com';
 
 const AuthContext = createContext<AuthContextType>({
   currentUser: null,
@@ -33,45 +32,37 @@ const AuthContext = createContext<AuthContextType>({
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isAdminRoleInDb, setIsAdminRoleInDb] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (user) {
-        // Check if user is the authorized bootstrap admin or has role in /admins/{uid}
-        if (user.email && user.email.toLowerCase() === BOOTSTRAP_ADMIN_EMAIL.toLowerCase()) {
-          setIsAdminRoleInDb(true);
-          // Ensure admin record in /admins/{uid} exists so rules checking exists(/admins/$(uid)) pass
+        // Enforce email_verified and database check
+        const isVerifiedAdmin = await verifyUserIsAdmin(user.email, user.uid, user.emailVerified);
+        setIsAdmin(isVerifiedAdmin);
+
+        // Sync admin doc for authorized bootstrap owner
+        if (isVerifiedAdmin && user.email?.toLowerCase() === BOOTSTRAP_ADMIN_EMAIL.toLowerCase()) {
           setDoc(
             doc(db, 'admins', user.uid),
             {
-              email: user.email,
-              role: 'admin',
+              email: user.email.toLowerCase(),
+              role: 'owner',
               updatedAt: new Date().toISOString(),
             },
             { merge: true }
           ).catch((e) => console.warn('Admin record sync notice:', e));
-        } else {
-          try {
-            const adminDoc = await getDoc(doc(db, 'admins', user.uid));
-            setIsAdminRoleInDb(adminDoc.exists());
-          } catch {
-            setIsAdminRoleInDb(false);
-          }
         }
       } else {
-        setIsAdminRoleInDb(false);
+        setIsAdmin(false);
       }
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
-
-  const isGoogleAdmin = Boolean(currentUser && currentUser.email === BOOTSTRAP_ADMIN_EMAIL);
-  const isAdmin = isGoogleAdmin || isAdminRoleInDb;
 
   const adminDisplayName = currentUser?.displayName || currentUser?.email || 'Administrator';
 
@@ -94,7 +85,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
-    setIsAdminRoleInDb(false);
+    setIsAdmin(false);
     await signOut(auth);
   };
 

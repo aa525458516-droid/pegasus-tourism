@@ -7,14 +7,14 @@ interface HomeTrackSectionProps {
 }
 
 export const HomeTrackSection: React.FC<HomeTrackSectionProps> = ({ onTrack }) => {
-  const { t, direction } = useLanguage();
+  const { t, direction, language } = useLanguage();
   const [reference, setReference] = useState('');
   const [emailOrPhone, setEmailOrPhone] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!reference.trim()) return;
-    onTrack(reference.trim().toUpperCase(), emailOrPhone.trim());
+    onTrack(reference.trim().toUpperCase(), emailOrPhone.trim() || undefined);
   };
 
   return (
@@ -28,7 +28,15 @@ export const HomeTrackSection: React.FC<HomeTrackSectionProps> = ({ onTrack }) =
           <div className="relative z-10 max-w-3xl mx-auto text-center">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/40 uppercase tracking-widest mb-3">
               <ShieldCheck className="w-3.5 h-3.5 text-[#D4AF37]" />
-              <span>Real-Time Reservation Status</span>
+              <span>
+                {language === 'ru'
+                  ? 'Статус заказа в реальном времени'
+                  : language === 'ar'
+                  ? 'حالة الحجز المباشرة'
+                  : language === 'de'
+                  ? 'Live-Buchungsstatus'
+                  : 'Real-Time Reservation Status'}
+              </span>
             </span>
 
             <h2 className="text-2xl sm:text-3xl font-bold font-heading text-white mb-2">
@@ -42,7 +50,7 @@ export const HomeTrackSection: React.FC<HomeTrackSectionProps> = ({ onTrack }) =
             {/* Quick Track Input Bar */}
             <form
               onSubmit={handleSubmit}
-              className="bg-white/10 backdrop-blur-md p-2 sm:p-3 rounded-2xl border border-white/20 shadow-lg flex flex-col sm:flex-row gap-2.5"
+              className="bg-white/10 backdrop-blur-md p-2 sm:p-3 rounded-2xl border border-white/20 shadow-lg flex flex-col sm:flex-row gap-2.5 max-w-3xl mx-auto"
             >
               <div className="relative flex-1">
                 <input
@@ -50,19 +58,22 @@ export const HomeTrackSection: React.FC<HomeTrackSectionProps> = ({ onTrack }) =
                   required
                   value={reference}
                   onChange={(e) => setReference(e.target.value.toUpperCase())}
-                  placeholder={t('home.trackRefPlaceholder')}
+                  placeholder={t('home.trackRefPlaceholder', 'e.g. PEG-2026-XXXXX or PEG-TRIP-2026-XXXXX')}
                   className="w-full pl-9 rtl:pl-3 rtl:pr-9 pr-3 py-3 rounded-xl bg-white text-slate-900 text-xs sm:text-sm font-mono placeholder:font-sans placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-[#D4AF37]"
+                  dir="ltr"
                 />
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 rtl:left-auto rtl:right-3 top-3.5" />
               </div>
 
-              <div className="relative flex-1">
+              <div className="flex-1">
                 <input
                   type="text"
+                  required
                   value={emailOrPhone}
                   onChange={(e) => setEmailOrPhone(e.target.value)}
-                  placeholder={t('home.trackContactPlaceholder')}
+                  placeholder={t('track.contactPlaceholder', 'Booking email or phone')}
                   className="w-full px-3.5 py-3 rounded-xl bg-white text-slate-900 text-xs sm:text-sm placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-[#D4AF37]"
+                  dir="ltr"
                 />
               </div>
 
@@ -78,11 +89,11 @@ export const HomeTrackSection: React.FC<HomeTrackSectionProps> = ({ onTrack }) =
             <div className="mt-4 flex flex-wrap items-center justify-center gap-4 text-[11px] text-slate-400">
               <span className="flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5 text-[#D4AF37]" />
-                Live Driver Assignment
+                {language === 'ru' ? 'Трансферы из/в аэропорт' : language === 'ar' ? 'توصيل المطار' : language === 'de' ? 'Flughafentransfers' : 'Airport Transfers'}
               </span>
               <span className="flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5 text-[#D4AF37]" />
-                Flight Monitoring
+                {language === 'ru' ? 'Индивидуальные туры и цены' : language === 'ar' ? 'رحلات مخصصة وتسعير' : language === 'de' ? 'Individuelle Reisen & Preise' : 'Custom Trips & Pricing'}
               </span>
               <span className="flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5 text-[#D4AF37]" />

@@ -1,4 +1,4 @@
-export type Language = 'en' | 'de' | 'ar';
+export type Language = 'en' | 'de' | 'ar' | 'ru';
 export type Direction = 'ltr' | 'rtl';
 
 export type BookingStatus = 'Pending' | 'Confirmed' | 'Completed' | 'Cancelled';
@@ -30,8 +30,8 @@ export interface Booking {
   phone: string;
   email: string;
   nationality: string;
-  passengerCount: number;
-  luggageCount: number;
+  passengerCount: number; // Max 4
+  luggageCount: number;   // Free field, no fixed limit
   pickupDate: string;
   pickupTime: string;
   serviceType: ServiceType;
@@ -45,11 +45,16 @@ export interface Booking {
   flightDirection?: FlightDirection;
   flightTime?: string;
   vehicleType: string;
+  vehicleName?: string;
+  quotedPrice?: number | null;
+  priceCurrency?: string;
+  priceStatus?: 'fixed' | 'price_on_request';
   tourId?: string;
   tourTitle?: string;
   notes?: string;
   status: BookingStatus;
-  adminNotes?: string;
+  adminNotes?: string;       // Admin private internal notes
+  customerMessage?: string;  // Public message shown to customer on tracking page
   createdAt: string;
   updatedAt: string;
 }
@@ -64,15 +69,21 @@ export interface BookingPublicStatus {
   destination: string;
   pickupLocation?: LocationDetails;
   destinationLocation?: LocationDetails;
-  vehicleType: string;
+  vehicleType?: string;
+  vehicleName?: string;
+  quotedPrice?: number | null;
+  priceCurrency?: string;
+  priceStatus?: 'fixed' | 'price_on_request';
   serviceType?: ServiceType;
   tripType?: TripType;
   passengerCount?: number;
   tourTitle?: string;
-  emailHash?: string;
-  phoneHash?: string;
-  adminNotes?: string;
+  customerMessage?: string;
+  tripSummary?: string;
+  verifyEmailHash?: string;
+  verifyPhoneHash?: string;
   updatedAt: string;
+  createdAt?: string;
 }
 
 export interface Tour {
@@ -80,6 +91,7 @@ export interface Tour {
   title: string;
   titleDe: string;
   titleAr: string;
+  titleRu?: string;
   category: 'historical' | 'marine' | 'safari' | 'daytrip' | 'kite_water' | 'boat_trips' | 'transportation';
   destination: string;
   duration: string;
@@ -89,10 +101,24 @@ export interface Tour {
   description: string;
   descriptionDe: string;
   descriptionAr: string;
+  descriptionRu?: string;
+  fullDescription?: string;
+  meetingPickupInfo?: string;
+  importantInfo?: string;
+  available?: boolean;
   highlights: string[];
+  highlightsDe?: string[];
+  highlightsAr?: string[];
+  highlightsRu?: string[];
   included: string[];
+  includedDe?: string[];
+  includedAr?: string[];
+  includedRu?: string[];
   excluded: string[];
-  imageUrl: string;
+  excludedDe?: string[];
+  excludedAr?: string[];
+  excludedRu?: string[];
+  imageUrl?: string;
   galleryUrls?: string[];
   featured: boolean;
   active: boolean;
@@ -115,15 +141,46 @@ export interface ContactMessage {
   createdAt: string;
 }
 
+export interface CompanyPolicies {
+  cancellationEn?: string;
+  cancellationPolicyEn?: string;
+  cancellationDe?: string;
+  cancellationAr?: string;
+  cancellationRu?: string;
+  waitingTimeEn?: string;
+  waitingTimePolicyEn?: string;
+  waitingTimeDe?: string;
+  waitingTimeAr?: string;
+  waitingTimeRu?: string;
+  inclusionsEn?: string;
+  inclusionsDe?: string;
+  inclusionsAr?: string;
+  inclusionsRu?: string;
+  paymentNotesEn?: string;
+  paymentTermsEn?: string;
+  paymentNotesDe?: string;
+  paymentNotesAr?: string;
+  paymentNotesRu?: string;
+}
+
+export interface SocialMediaLinks {
+  instagramHandle: string;
+  instagramUrl: string;
+  tiktokHandle: string;
+  tiktokUrl: string;
+}
+
 export interface CompanySettings {
   companyName: string;
   phone: string;
   whatsapp: string;
   email: string;
-  address: string;
-  emergencyPhone: string;
-  officeHours: string;
-  licenseNumber: string;
+  address?: string;
+  emergencyPhone?: string;
+  officeHours?: string;
+  licenseNumber?: string;
+  socialMedia?: SocialMediaLinks;
+  policies?: CompanyPolicies;
   updatedAt?: string;
 }
 
@@ -132,19 +189,60 @@ export interface VehicleOption {
   name: string;
   nameDe: string;
   nameAr: string;
+  nameRu?: string;
   category: string;
-  capacityPassengers: number;
-  capacityLuggage: number;
+  capacityPassengers?: number | null;
+  capacityLuggage?: number | null;
+  modelYear?: string;
   description: string;
   descriptionDe: string;
   descriptionAr: string;
-  imageUrl: string;
+  descriptionRu?: string;
+  imageUrl?: string;
   features: string[];
+  active?: boolean;
+}
+
+export type VehicleCategory = VehicleOption;
+
+export interface TransferPriceRule {
+  id: string;
+  origin: string;
+  destination: string;
+  vehicleId: string;
+  oneWayPrice: number | null;
+  roundTripPrice: number | null;
+  currency: 'EUR' | 'USD' | 'EGP';
+  active: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface DestinationItem {
+  id: string;
+  name: string;
+  nameAr: string;
+  nameDe: string;
+  nameRu?: string;
+  category: 'red_sea' | 'cairo' | 'luxor' | 'sinai' | 'alexandria' | 'all';
+  imageUrl: string;
+  description: string;
+  descriptionAr: string;
+  descriptionDe: string;
+  descriptionRu?: string;
+  distanceFromHurghada?: string;
+  suggestedTripDuration?: string;
+  pricePerPerson?: number;
+  active: boolean;
+  featured: boolean;
+  displayOrder: number;
 }
 
 export type CustomTripStatus =
+  | 'Pending'
   | 'Pending Review'
   | 'Price Sent'
+  | 'Price Approved'
   | 'Customer Approved'
   | 'Confirmed'
   | 'Completed'
@@ -156,9 +254,11 @@ export interface ExperienceItem {
   title: string;
   titleDe: string;
   titleAr: string;
+  titleRu?: string;
   description: string;
   descriptionDe: string;
   descriptionAr: string;
+  descriptionRu?: string;
   badge: string;
   active: boolean;
 }
@@ -171,6 +271,7 @@ export interface SelectedExperience {
   notes?: string;
 }
 
+// Confidential master custom trip request (Admin only, contains customer PII)
 export interface CustomTripRequest {
   id?: string;
   referenceNumber: string;
@@ -180,22 +281,62 @@ export interface CustomTripRequest {
   country: string;
   startDate: string;
   endDate?: string;
-  passengerCount: number; // max 2
+  passengerCount: number; // Max 4
   pickup: string;
   accommodation: string;
   destination?: string;
   experiences: SelectedExperience[];
   specialRequests?: string;
+  price?: number;
+  currency?: string;
   pricing: {
-    internalCost?: number;
-    margin?: number;
     finalPrice?: number;
     currency: string;
   };
+  customerMessage?: string;
   status: CustomTripStatus;
-  emailHash?: string;
-  phoneHash?: string;
   createdAt: string;
   updatedAt: string;
 }
 
+// Sanitized public custom trip tracking card (Zero PII, verified by salted email/phone hashes)
+export interface CustomTripPublicStatus {
+  id?: string;
+  referenceNumber: string;
+  maskedCustomerName: string;
+  startDate: string;
+  endDate?: string;
+  passengerCount: number;
+  pickup: string;
+  accommodation: string;
+  destination?: string;
+  experiences: SelectedExperience[];
+  pricing: {
+    finalPrice?: number;
+    currency: string;
+  };
+  customerMessage?: string;
+  status: CustomTripStatus;
+  verifyEmailHash?: string;
+  verifyPhoneHash?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Admin-only pricing doc (stored in separate admin collection /customTripAdminPricing)
+export interface CustomTripAdminPricing {
+  referenceNumber: string;
+  internalCost: number;
+  margin: number;
+  finalPrice: number;
+  currency: string;
+  updatedAt: string;
+  updatedBy?: string;
+}
+
+export interface AdminEmailRecord {
+  email: string;
+  addedAt: string;
+  createdAt?: string;
+  addedBy?: string;
+}
